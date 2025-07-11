@@ -11,6 +11,7 @@
 | **Asignatura** | Redes de Computadoras |
 | **Actividad** | Laboratorio - Red Humana y Análisis de Paquetes |
 
+[INFORME PDF](./informe_lab1parte1.pdf)
 
 ---
 
