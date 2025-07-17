@@ -263,3 +263,80 @@ Un gestor que se encargue de manejar concurrencia de mensajes, tambien que pueda
 
 La ventaja es que llega a ser muchisimo mas rapido, cuando existen mas conmutadores se crea paralelismo y por ende la carga de trabajo es menor en cada uno , la desventaja es que el paralelismo conlleva que existan mecanismos de sincronización y coordinación entre los conmutadores, especialmente para evitar colisiones, bucles de red o inconsistencias en el enrutamiento de datos. También puede aumentar la complejidad del mantenimiento, configuración y monitoreo del sistema, así como los costos asociados al hardware adicional.
 
+
+### Parte 4.1: Wireshark
+
+
+1.Descargue el archivo https://www.cloudshark.org/captures/e6fb36096dbb (Export ->
+Download)
+
+
+![alt text](image-14.png)
+
+
+2. Cree un perfil (Configuration -> Profiles) con su primer nombre y primer apellido
+
+![alt text](image-15.png)
+
+
+
+3. Abra el archivo descargado (File -> Open)
+
+
+![alt text](image-16.png)
+
+
+4. Aplique el formato de tiempo Time of Day a la columna Tiempo (View -> Time Display)
+
+![alt text](image-18.png)
+
+
+5. Agregue una columna con la longitud del segmento TCP (Selecciona la primera fila, en
+el panel despliegue Transmission Control Proto inferiorcol, seleccione TCP Segment Len
+y apliquelo como una columna)
+
+![alt text](image-19.png)
+
+
+6. Elimine u oculte la columna Longitud
+
+![alt text](image-20.png)
+
+
+7. Aplique un esquema de paneles que sea de su preferencia (que no sea el esquema por
+defecto)
+
+
+![alt text](image-21.png)
+
+8. Aplique una regla de color para los paquetes TCP cuyas banderas SYN sean iguales a 1,
+y coloque el color de su preferencia (View -> Coloring Rules)
+
+
+![alt text](image-23.png)
+
+9. Cree un botón que aplique un filtro para paquetes TCP con la bandera SYN igual a 1.
+![alt text](image-24.png)
+
+
+10. Oculte las interfaces virtuales (en caso aplique
+
+
+### Parte 4.2: Wireshark
+
+En la segunda parte, se realizará una captura de paquetes con un ring buffer.
+
+
+1. Abra una terminal y ejecute el comando ifconfig/ipconfig (dependiendo de su SO).
+Detalle y explique lo observado, investigue (i.e.: ‘man ifconfig’, documentación) de ser
+necesario. ¿Cuál es su interfaz de red?
+
+
+
+2. Luego, retornando a Wireshark, desactive las interfaces virtuales o que no aplique.
+
+
+3. Realice una captura de paquetes con la interfaz de Ethernet o WiFi con una
+configuración de ring buffer, con un tamaño de 5 MB por archivo y un número máximo
+de 10 archivos (Capture -> Options -> Output) Genere tráfico para que los archivos se
+creen. Defina el nombre de los archivos de la siguiente forma: lab1_carnet.pgcap
