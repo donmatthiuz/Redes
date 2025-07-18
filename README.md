@@ -331,12 +331,25 @@ En la segunda parte, se realizará una captura de paquetes con un ring buffer.
 Detalle y explique lo observado, investigue (i.e.: ‘man ifconfig’, documentación) de ser
 necesario. ¿Cuál es su interfaz de red?
 
+![alt text](image-25.png)
+
+Mi interfaz es wifi
 
 
 2. Luego, retornando a Wireshark, desactive las interfaces virtuales o que no aplique.
+
+![alt text](image-26.png)
 
 
 3. Realice una captura de paquetes con la interfaz de Ethernet o WiFi con una
 configuración de ring buffer, con un tamaño de 5 MB por archivo y un número máximo
 de 10 archivos (Capture -> Options -> Output) Genere tráfico para que los archivos se
 creen. Defina el nombre de los archivos de la siguiente forma: lab1_carnet.pgcap
+
+![alt text](image-27.png)
+
+![alt text](image-31.png)
+
+![alt text](image-30.png)
+
+![alt text](image-32.png)
