@@ -392,7 +392,7 @@ c. ¿Qué lenguajes (si aplica) indica el navegador que acepta a el servidor?
 
 ![alt text](image-38.png)
 
-Acepta : text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n
+Acepta : text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
 
 
 d. ¿Cuántos bytes de contenido fueron devueltos por el servidor?
