@@ -264,7 +264,7 @@ Un gestor que se encargue de manejar concurrencia de mensajes, tambien que pueda
 La ventaja es que llega a ser muchisimo mas rapido, cuando existen mas conmutadores se crea paralelismo y por ende la carga de trabajo es menor en cada uno , la desventaja es que el paralelismo conlleva que existan mecanismos de sincronización y coordinación entre los conmutadores, especialmente para evitar colisiones, bucles de red o inconsistencias en el enrutamiento de datos. También puede aumentar la complejidad del mantenimiento, configuración y monitoreo del sistema, así como los costos asociados al hardware adicional.
 
 
-### Parte 4.1: Wireshark
+### Parte 4.1: Wireshark personalización del entorno
 
 
 1.Descargue el archivo https://www.cloudshark.org/captures/e6fb36096dbb (Export ->
@@ -322,7 +322,7 @@ y coloque el color de su preferencia (View -> Coloring Rules)
 10. Oculte las interfaces virtuales (en caso aplique
 
 
-### Parte 4.2: Wireshark
+### Parte 4.2: configuración de la captura de paquetes
 
 En la segunda parte, se realizará una captura de paquetes con un ring buffer.
 
@@ -353,3 +353,84 @@ creen. Defina el nombre de los archivos de la siguiente forma: lab1_carnet.pgcap
 ![alt text](image-30.png)
 
 ![alt text](image-32.png)
+
+![alt text](image-33.png)
+
+
+
+### Parte 4.3: configuración de la captura de paquetes
+
+
+En la tercera parte se analizará el protocolo HTTP. Debe realizar tomas de pantalla que validen
+sus respuestas.
+1. Abra su navegador, inicie una captura de paquetes en Wireshark (sin filtro) y acceda a
+la siguiente direccion (Si por alguna razón debe repetir el paso, borre su caché o utiliza
+el modo incógnito de su navegador):
+http://gaia.cs.umass.edu/wireshark-labs/INTRO-wireshark-file1.html
+
+
+2. Detenga la captura de paquetes (si desea realizar una nueva captura de la página
+deberá borrar el caché de su navegador, de lo contrario no se realizará la captura del
+protocolo HTTP)
+
+![alt text](image-35.png)
+
+a. ¿Qué versión de HTTP está ejecutando su navegador?
+
+Usa HTTP 1.1
+
+![alt text](image-36.png)
+
+b. ¿Qué version de HTTP está ejecutando el servidor?
+
+![alt text](image-37.png)
+
+Usa HTTP 1.1
+
+
+c. ¿Qué lenguajes (si aplica) indica el navegador que acepta a el servidor?
+
+![alt text](image-38.png)
+
+Acepta : text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n
+
+
+d. ¿Cuántos bytes de contenido fueron devueltos por el servidor?
+
+
+![alt text](image-39.png)
+
+Fueron 81 bytes
+
+e. En el caso que haya un problema de rendimiento mientras se descarga la
+página, ¿en que dispositivos de la red convendría “escuchar” los paquetes? ¿Es
+conveniente instalar Wireshark en el servidor? Justifique
+
+En el router o switch vendria bien colocar la escucha de los paquetes, ya que este podria analizar el trafico de la red y diagnosticar porque esta habiendo retraso, y notificar a nuestros dispositivos del porque. En especifico del cliente que consulta la informacion
+
+Aun asi instalar wireshark en un servidor no es malo, y es conveniente , ya que puede ayudar a detectar trafico malicioso y tomar medidas de seguridad o de ataque. Pero hay que tener muchisimo cuidado debido a que debemos de manejarlo con un broker porque puede resultar en un rendimiento empeorado en nuestro server. 
+
+
+
+
+## Discusion
+
+La comunicacion entre dispositivos requiere de un protocolo extricto, al analizar este caso se encontro muchos problemas de telefono descompuesto y sobre todo el metodo de morse no ayudo mucho a su resolucion. 
+
+Esto debido a que la comunicacion entre ambas partes no estaba muy clara, ademas consigo puede acarrear problemas de entender muy mal el protocolo. Al usar el conmutador esto solo complico mas las cosas pero ayudo a poder saber a quien enviar la informacion.
+
+Con wireshark se destaco que es muy util para poder ser usado en analisis de envio de paquetes , y esto puede servir a la larga para detectar problemas de rendimiento o para detectar ataques no deseados
+
+## Comentarios
+
+En mi opinion fue mejor usar nuestra voz que scripts o librerias para los sonidos ya que era mas facil de controlar, ademas que wireshark si fue bastante facil de detectar los protocolos usando sus filtros. 
+
+## Conclusiones
+
+- El uso de un conmutador es indispensable para la comunicacion de 2 o mas clientes
+- Wireshark nos ayuda a detectar amenazas o problemas de rendimiento
+- Es necesario definir bien las reglas de la comunicacion para poder hacer uso de la codificacion
+
+## Referencias
+
+- https://www.reddit.com/r/wireshark/
