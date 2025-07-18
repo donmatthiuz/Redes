@@ -10,6 +10,7 @@
 | **Preparado por** | [Mathew Cordero Aquino] |
 | **Asignatura** | Redes de Computadoras |
 | **Actividad** | Laboratorio - Red Humana y Análisis de Paquetes |
+| **Compañero** | Javier Chen - 22153 |
 
 [INFORME PDF](./informe_lab1parte1.pdf)
 
