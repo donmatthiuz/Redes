@@ -1,34 +1,38 @@
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, Lock
 import time
 from connection.TablaRuteo import TablaRuteo
 
 class Nodo:
-    def __init__(self, id, tabla):
+    def __init__(self, id, tabla=None, lock=None):
         self.id = id
-        self.tabla = tabla
+        # Si no se pasa una tabla, se crea una propia
+        self.tabla = tabla or TablaRuteo(Manager())
+        self.lock = lock or Lock()
 
     def ruteo(self):
         while True:
-            self.tabla.actualizar("192.168.0.1", "Interfaz 1")
+            with self.lock: 
+                self.tabla.actualizar("192.168.0.1", "Interfaz 1")
             print(f"[Nodo {self.id}] Actualizando ruteo")
             time.sleep(1)
 
     def forwarding(self):
         while True:
-            print(f"[Nodo {self.id}] Leyendo tabla: {self.tabla.mostrar()}")
+            with self.lock:
+                tabla_actual = self.tabla.mostrar()
+            print(f"[Nodo {self.id}] Leyendo tabla: {tabla_actual}")
             time.sleep(1)
 
-if __name__ == "__main__":
-  manager = Manager()
-  tabla_compartida = TablaRuteo(manager)
+    def main_executor(self):
+        # Creamos procesos para ruteo y forwarding
+        p1 = Process(target=self.ruteo)
+        p2 = Process(target=self.forwarding)
 
-  nodo = Nodo(1, tabla_compartida)
+        p1.start()
+        p2.start()
 
-  p1 = Process(target=nodo.ruteo)
-  p2 = Process(target=nodo.forwarding)
+        # Esperamos a que terminen (en este caso nunca)
+        p1.join()
+        p2.join()
 
-  p1.start()
-  p2.start()
 
-  p1.join()
-  p2.join()
