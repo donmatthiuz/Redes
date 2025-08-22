@@ -1,0 +1,9 @@
+{
+  "type": "names",
+  "config": {
+    "A": "nodeA@localhost",
+    "B": "nodeB@localhost",
+    "C": "nodeC@localhost",
+    "D": "nodeD@localhost"
+  }
+}

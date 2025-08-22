@@ -16,9 +16,7 @@ class Nodo:
         self.socket.on_message = self._on_message
 
     def _on_message(self, message, addr):
-        """
-        Maneja mensajes recibidos y actualiza la tabla de ruteo si es necesario.
-        """
+       
         tipo = message.get("type")
         if tipo == "hello":
             vecino = message.get("from")
@@ -49,13 +47,11 @@ class Nodo:
             time.sleep(1)
 
     def main_executor(self):
-        # Creamos procesos para ruteo y forwarding
         p1 = Process(target=self.ruteo)
         p2 = Process(target=self.forwarding)
 
         p1.start()
         p2.start()
 
-        # Esperamos a que terminen (en este caso nunca)
         p1.join()
         p2.join()

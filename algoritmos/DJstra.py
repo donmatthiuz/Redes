@@ -7,6 +7,7 @@ class SolveDjstra():
 
   def minDistance(self, dist, sptSet):
         min = 1e7
+        min_index = 0
         for v in range(self.red.V):
             if dist[v] < min and sptSet[v] == False:
                 min = dist[v]
@@ -30,6 +31,9 @@ class SolveDjstra():
               sptSet[v] == False and 
               dist[v] > dist[u] + self.red.graph[u][v]):
               dist[v] = dist[u] + self.red.graph[u][v]
-    self.debugPrint(dist)
+
+    self.printSolution(dist)
+
+    return dist
   
   
