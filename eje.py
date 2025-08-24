@@ -6,7 +6,6 @@ from connection.socket_manager import SocketManager
 from algoritmos.Flodding import Flooding
 
 class ProtocolHandler:
-    """Maneja el protocolo JSON estándar del laboratorio"""
     
     @staticmethod
     def create_message(proto, msg_type, from_addr, to_addr, payload, ttl=5, headers=None):

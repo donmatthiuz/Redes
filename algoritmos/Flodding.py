@@ -2,10 +2,7 @@ import time
 
 class Flooding:
     def __init__(self, node_id, neighbors):
-        """
-        node_id: ID único del nodo (ejemplo: "A")
-        neighbors: lista de IDs de nodos vecinos
-        """
+        
         self.node_id = node_id
         self.neighbors = neighbors
         self.seen_messages = set()
