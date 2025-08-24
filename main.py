@@ -18,4 +18,4 @@ if __name__ == "__main__":
     port = 5000 + ord(node_id) - ord('A')  # A=5000, B=5001, C=5002, D=5003
     
     node = Nodo(node_id, port=port)
-    node.start_all_processes()
+    node.main_executor()
