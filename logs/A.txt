@@ -1,0 +1,34 @@
+2025-08-24 23:07:26 - [Nodo A] Inicializado con algoritmo LSR
+2025-08-24 23:07:26 - [Nodo A] Dirección: nodeA@localhost
+2025-08-24 23:07:26 - [Nodo A] Vecinos: ['B']
+2025-08-24 23:07:26 - [Nodo A] Costos vecinos: {'B': 1}
+2025-08-24 23:07:26 - [Nodo A] [RUTEO-LSR] Proceso iniciado
+2025-08-24 23:07:26 - [Nodo A] [LSR] LSP difundido a 1 vecinos
+2025-08-24 23:07:26 - [Nodo A] Socket iniciado en proceso separado
+2025-08-24 23:07:26 - [Nodo A] [FORWARDING-LSR] Proceso iniciado
+2025-08-24 23:07:27 - [Nodo A] [SOCKET] 📨 Recibido lsp(lsr) de ('127.0.0.1', 59498)
+2025-08-24 23:07:27 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
+2025-08-24 23:07:27 - [Nodo A] [FORWARDING-LSR] Paquete: lsp de B hacia None
+2025-08-24 23:07:37 - [Nodo A] [LSR] HELLO enviado a vecinos
+2025-08-24 23:07:37 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
+2025-08-24 23:07:38 - [Nodo A] [SOCKET] 📨 Recibido hello(lsr) de ('127.0.0.1', 59501)
+2025-08-24 23:07:38 - [Nodo A] [LSR] Vecino descubierto: nodeB@localhost
+2025-08-24 23:07:38 - [Nodo A] [FORWARDING-LSR] Paquete: hello de nodeB@localhost hacia broadcast
+2025-08-24 23:07:46 - [Nodo A] 📤 Enviando mensaje (LSR) a nodeB: 'hola pos nomas'
+2025-08-24 23:07:46 - [Nodo A] [FORWARDING-LSR] Paquete: message de nodeA@localhost hacia nodeB@localhost
+2025-08-24 23:07:46 - [Nodo A] [LSR] 🔄 Reenviando a nodeB@localhost vía nodeB@localhost (5001)
+2025-08-24 23:07:46 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
+2025-08-24 23:07:47 - [Nodo A] [LSR] HELLO enviado a vecinos
+2025-08-24 23:07:47 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
+2025-08-24 23:07:48 - [Nodo A] [SOCKET] 📨 Recibido hello(lsr) de ('127.0.0.1', 59506)
+2025-08-24 23:07:48 - [Nodo A] [FORWARDING-LSR] Paquete: hello de nodeB@localhost hacia broadcast
+2025-08-24 23:07:48 - [Nodo A] [LSR] Vecino descubierto: nodeB@localhost
+2025-08-24 23:07:57 - [Nodo A] [LSR] LSP difundido a 1 vecinos
+2025-08-24 23:07:57 - [Nodo A] [LSR] HELLO enviado a vecinos
+2025-08-24 23:07:57 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
+2025-08-24 23:07:57 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
+2025-08-24 23:07:58 - [Nodo A] [SOCKET] 📨 Recibido lsp(lsr) de ('127.0.0.1', 59509)
+2025-08-24 23:07:58 - [Nodo A] [FORWARDING-LSR] Paquete: lsp de B hacia None
+2025-08-24 23:07:58 - [Nodo A] [SOCKET] 📨 Recibido hello(lsr) de ('127.0.0.1', 59510)
+2025-08-24 23:07:58 - [Nodo A] [LSR] Vecino descubierto: nodeB@localhost
+2025-08-24 23:07:58 - [Nodo A] [FORWARDING-LSR] Paquete: hello de nodeB@localhost hacia broadcast
