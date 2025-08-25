@@ -466,17 +466,20 @@ class Nodo:
         if msg_type == "hello":
             # Nuevo vecino descubierto
             if from_addr and from_addr != self.my_address:
+                from_node_id = self._address_to_node_id(from_addr)
+                real_port = 5000 + ord(from_node_id) - ord('A') if from_node_id else addr[1]
+               
                 with self.lock:
                     self.shared_discovered_nodes[from_addr] = {
-                        'port': addr[1],
+                        'port': real_port,
                         'last_seen': time.time()
                     }
-                    self.shared_neighbor_ports[from_addr] = addr[1]
+                    self.shared_neighbor_ports[from_addr] = real_port
                 
                 # Notificar al proceso de nuevos nodos
                 self.new_nodes_queue.put({
                     'node_address': from_addr,
-                    'port': addr[1],
+                    'port': real_port,
                     'type': 'neighbor'
                 })
                 
@@ -601,7 +604,9 @@ class Nodo:
                 
                 # Reenviar según flooding
                 for neighbor_node_id, new_msg in forwards:
-                    neighbor_addr = self.names.get(neighbor_node_id, f"{neighbor_node_id}@localhost")
+                    neighbor_addr = self.names.get(neighbor_node_id, f"{neighbor_node_id}")
+
+                    print("Address: ", neighbor_addr)
                     self._forward_packet_flooding(neighbor_addr, new_msg)
 
     def _address_to_node_id(self, address):
