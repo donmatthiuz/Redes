@@ -4,8 +4,10 @@ import json
 from connection.socket_manager import SocketManager
 from connection.Mensajes import Mensajes_Protocolo
 from connection.Red import RedConfig
+from connection.Red import Red
 from algoritmos.Flodding import Flooding
 from algoritmos.LSR import LSR
+from algoritmos.DJstra import SolveDjstra
 from logs.Logs import Log
 
 class Nodo:
@@ -19,7 +21,7 @@ class Nodo:
         self.log = Log(f"./logs/{node_id}.txt")
         
         # Validar algoritmo
-        if self.algorithm not in ["flooding", "lsr"]:
+        if self.algorithm not in ["flooding", "lsr", "dijkstra"]:
             raise ValueError(f"Algoritmo no soportado: {algorithm}. Use 'flooding' o 'lsr'")
         
         # Manager para compartir datos entre procesos
@@ -75,6 +77,366 @@ class Nodo:
         if self.algorithm == "lsr":
             self.log.write(f"[Nodo {self.node_id}] Costos vecinos: {self.neighbor_costs}")
 
+        if self.algorithm == "dijkstra":
+        
+            self._initialize_dijkstra_network()
+
+    def _initialize_dijkstra_network(self):
+
+        # Crear mapeo de node_id a índices numéricos
+        self.node_to_index = {}
+        self.index_to_node = {}
+        all_nodes = set([self.node_id])
+        all_nodes.update(self.neighbors)
+        
+        # Agregar más nodos de la topología si están disponibles
+        for node_id, neighbors in self.topology.items():
+            all_nodes.add(node_id)
+            all_nodes.update(neighbors)
+        
+        # Crear mapeo bidireccional
+        for i, node_id in enumerate(sorted(all_nodes)):
+            self.node_to_index[node_id] = i
+            self.index_to_node[i] = node_id
+        
+        # Crear objeto Red
+        self.dijkstra_network = Red(len(all_nodes))
+        
+        # Inicializar con infinito
+        for i in range(len(all_nodes)):
+            for j in range(len(all_nodes)):
+                if i == j:
+                    self.dijkstra_network.graph[i][j] = 0
+                else:
+                    self.dijkstra_network.graph[i][j] = float('inf')
+        
+        # Agregar conexiones conocidas de la topología
+        for node_id, neighbors in self.topology.items():
+            if node_id in self.node_to_index:
+                src_idx = self.node_to_index[node_id]
+                for neighbor in neighbors:
+                    if neighbor in self.node_to_index:
+                        dest_idx = self.node_to_index[neighbor]
+                        # Costo por defecto 1, puede ser modificado
+                        cost = self.neighbor_costs.get(neighbor, 1) if node_id == self.node_id else 1
+                        self.dijkstra_network.graph[src_idx][dest_idx] = cost
+        
+        # Crear solver
+        self.dijkstra_solver = SolveDjstra(self.dijkstra_network)
+        
+        self.log.write(f"[Nodo {self.node_id}] Red Dijkstra inicializada con {len(all_nodes)} nodos")
+
+    def _ruteo_dijkstra(self):
+
+        # Inicializar tabla de ruteo
+        self._initialize_routing_table()
+        
+        # Enviar información inicial
+        self._send_initial_routing_info()
+        
+        # Calcular rutas iniciales con Dijkstra
+        self._update_dijkstra_routing_table()
+        
+        routing_info_timer = 0
+        dijkstra_update_timer = 0
+        topology_update_timer = 0
+        
+        while self.running.value:
+            try:
+                # 1. Procesar información de ruteo entrante
+                while not self.routing_info_queue.empty():
+                    message, addr = self.routing_info_queue.get()
+                    self._process_routing_info_dijkstra(message, addr)
+                
+                # 2. Procesar nuevos nodos
+                while not self.new_nodes_queue.empty():
+                    new_node_info = self.new_nodes_queue.get()
+                    self._process_new_node_dijkstra(new_node_info)
+                
+                # 3. Enviar información periódicamente (cada 10 segundos)
+                if routing_info_timer >= 100:
+                    self._send_dijkstra_info_packets()
+                    routing_info_timer = 0
+                
+                # 4. Actualizar topología y recalcular rutas (cada 15 segundos)
+                if dijkstra_update_timer >= 150:
+                    self._update_dijkstra_routing_table()
+                    dijkstra_update_timer = 0
+                
+                # 5. Actualizar información de topología (cada 5 segundos)
+                if topology_update_timer >= 50:
+                    self._broadcast_topology_info()
+                    topology_update_timer = 0
+                
+                routing_info_timer += 1
+                dijkstra_update_timer += 1
+                topology_update_timer += 1
+                time.sleep(0.1)
+                
+            except Exception as e:
+                self.log.write(f"[Nodo {self.node_id}] [RUTEO-DIJKSTRA] Error: {e}")
+                time.sleep(1)
+    
+    
+    def _forwarding_dijkstra(self):
+        while self.running.value:
+            try:
+                while not self.incoming_packets_queue.empty():
+                    message, addr = self.incoming_packets_queue.get()
+                    msg_type = message.get("type")
+                    msg_proto = message.get("proto", "")
+                    
+                    # Solo procesar mensajes que NO sean de ruteo en forwarding
+                    # Los mensajes de ruteo se procesan en el proceso de ruteo
+                    if msg_type == "message":
+                        self._process_incoming_packet_dijkstra(message, addr)
+                    # Los mensajes de ruteo (hello, dijkstra_info, etc.) se ignoran aquí
+                    # porque ya se procesan en el proceso de ruteo
+                
+                time.sleep(0.1)
+                
+            except Exception as e:
+                self.log.write(f"[Nodo {self.node_id}] [FORWARDING-DIJKSTRA] Error: {e}")
+                time.sleep(1)
+
+    
+    def _update_dijkstra_routing_table(self):
+        """Actualiza la tabla de ruteo usando Dijkstra."""
+        try:
+            src_idx = self.node_to_index[self.node_id]
+            routing_table = self.dijkstra_solver.get_routing_table(src_idx)
+            
+            with self.lock:
+                # Limpiar tabla actual
+                dijkstra_entries = {}
+                
+                for dest_idx, route_info in routing_table.items():
+                    if route_info['reachable']:
+                        dest_node_id = self.index_to_node[dest_idx]
+                        next_hop_node_id = self.index_to_node[route_info['next_hop']]
+                        
+                        dest_addr = self.names.get(dest_node_id, f"{dest_node_id}@localhost")
+                        next_hop_addr = self.names.get(next_hop_node_id, f"{next_hop_node_id}@localhost")
+                        next_hop_port = 5000 + ord(next_hop_node_id) - ord('A')
+                        
+                        dijkstra_entries[dest_addr] = {
+                            'next_hop': next_hop_addr,
+                            'distance': route_info['distance'],
+                            'interface': f"127.0.0.1:{next_hop_port}",
+                            'timestamp': time.time(),
+                            'algorithm': 'dijkstra'
+                        }
+                
+                # Actualizar tabla compartida manteniendo entradas de vecinos directos
+                for dest, info in dijkstra_entries.items():
+                    self.shared_routing_table[dest] = info
+            
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Tabla actualizada: {len(dijkstra_entries)} rutas")
+            
+        except Exception as e:
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Error actualizando tabla: {e}")
+
+    def _process_routing_info_dijkstra(self, message, addr):
+        msg_type = message.get("type")
+        from_addr = message.get("from")
+        
+        self.log.write(f"[Nodo {self.node_id}] [RUTEO-DIJKSTRA] Procesando {msg_type} de {from_addr}")
+        
+        if msg_type == "hello":
+            if from_addr and from_addr != self.my_address:
+                from_node_id = self._address_to_node_id(from_addr)
+                if from_node_id in self.neighbors:
+                    real_port = 5000 + ord(from_node_id) - ord('A')
+                    
+                    with self.lock:
+                        self.shared_discovered_nodes[from_addr] = {
+                            'port': real_port,
+                            'last_seen': time.time()
+                        }
+                        self.shared_neighbor_ports[from_addr] = real_port
+                    
+                    # ESTA LÍNEA FALTABA: Agregar a la cola de nuevos nodos
+                    self.new_nodes_queue.put({
+                        'node_address': from_addr,
+                        'port': real_port,
+                        'type': 'neighbor'
+                    })
+                    
+                    self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Vecino confirmado: {from_addr} ({from_node_id})")
+        
+        elif msg_type == "dijkstra_info":
+            # Procesar información de topología de otros nodos
+            self._process_dijkstra_topology_info(message, from_addr)
+        
+        elif msg_type == "topology_update":
+            # Procesar actualizaciones completas de topología
+            self._process_dijkstra_topology_info(message, from_addr)
+
+    def _process_dijkstra_topology_info(self, message, from_addr):
+        """Procesa información de topología para actualizar el grafo."""
+        topology_info = message.get("topology", {})
+        costs_info = message.get("costs", {})
+        
+        updated = False
+        from_node_id = self._address_to_node_id(from_addr)
+        
+        if from_node_id in self.node_to_index:
+            from_idx = self.node_to_index[from_node_id]
+            
+            # Actualizar conexiones conocidas por el nodo remoto
+            for dest_node_id, cost in costs_info.items():
+                if dest_node_id in self.node_to_index:
+                    dest_idx = self.node_to_index[dest_node_id]
+                    current_cost = self.dijkstra_network.graph[from_idx][dest_idx]
+                    
+                    if current_cost != cost:
+                        self.dijkstra_network.graph[from_idx][dest_idx] = cost
+                        updated = True
+            
+            if updated:
+                self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Topología actualizada con info de {from_node_id}")
+                # Recalcular rutas después de actualizar topología
+                self._update_dijkstra_routing_table()
+
+    def _send_dijkstra_info_packets(self):
+        """Envía información de topología a los vecinos."""
+        # Crear paquete con información de topología local
+        dijkstra_packet = {
+            "type": "dijkstra_info",
+            "proto": "dijkstra",
+            "from": self.my_address,
+            "timestamp": time.time(),
+            "topology": self.neighbors,
+            "costs": self.neighbor_costs
+        }
+        
+        with self.lock:
+            discovered_nodes = dict(self.shared_discovered_nodes)
+        
+        # Enviar solo a vecinos activos
+        sent_count = 0
+        for neighbor_id in self.neighbors:
+            neighbor_addr = self.names.get(neighbor_id, f"{neighbor_id}@localhost")
+            if neighbor_addr in discovered_nodes:
+                neighbor_port = 5000 + ord(neighbor_id) - ord('A')
+                self.outgoing_packets_queue.put(("127.0.0.1", neighbor_port, dijkstra_packet))
+                sent_count += 1
+        
+        if sent_count > 0:
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Info enviada a {sent_count} vecinos")
+
+    def _broadcast_topology_info(self):
+        """Difunde información de topología conocida."""
+        # Similar a _send_dijkstra_info_packets pero con más información
+        topology_packet = {
+            "type": "topology_update",
+            "proto": "dijkstra",
+            "from": self.my_address,
+            "timestamp": time.time(),
+            "full_topology": dict(self.topology),
+            "known_costs": self.neighbor_costs
+        }
+        
+        with self.lock:
+            discovered_nodes = dict(self.shared_discovered_nodes)
+        
+        for neighbor_id in self.neighbors:
+            neighbor_addr = self.names.get(neighbor_id, f"{neighbor_id}@localhost")
+            if neighbor_addr in discovered_nodes:
+                neighbor_port = 5000 + ord(neighbor_id) - ord('A')
+                self.outgoing_packets_queue.put(("127.0.0.1", neighbor_port, topology_packet))
+
+    def _process_new_node_dijkstra(self, new_node_info):
+        """Procesa un nuevo nodo descubierto para Dijkstra."""
+        node_addr = new_node_info['node_address']
+        node_port = new_node_info['port']
+        
+        self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Procesando nuevo nodo: {node_addr}")
+        
+        # Actualizar tabla de ruteo con nodo directo
+        with self.lock:
+            if node_addr not in self.shared_routing_table:
+                self.shared_routing_table[node_addr] = {
+                    'next_hop': node_addr,
+                    'distance': 1,
+                    'interface': f"127.0.0.1:{node_port}",
+                    'timestamp': time.time(),
+                    'algorithm': 'dijkstra'
+                }
+        
+        # Recalcular rutas después de agregar nuevo nodo
+        self._update_dijkstra_routing_table()
+
+    
+    def _process_incoming_packet_dijkstra(self, message, addr):
+
+        msg_type = message.get("type")
+        from_addr = message.get("from")
+        to_addr = message.get("to")
+        msg_proto = message.get("proto", "")
+        
+        self.log.write(f"[Nodo {self.node_id}] [FORWARDING-DIJKSTRA] Paquete: {msg_type}({msg_proto}) de {from_addr} hacia {to_addr}")
+        
+        # Si el mensaje es para nosotros
+        if to_addr == self.my_address or self._address_to_node_id(to_addr) == self.node_id:
+            if msg_type == "message":
+                payload = message.get("payload", {})
+                data = payload.get("data", "")
+                original_sender = message.get("original_sender", from_addr)
+                print(f"[Nodo {self.node_id}] [DIJKSTRA] 📨 MENSAJE RECIBIDO de {original_sender}: '{data}'")
+                self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] 📨 MENSAJE RECIBIDO de {original_sender}: '{data}'")
+            return
+        
+        # Si es un mensaje de datos con protocolo dijkstra, usar tabla de ruteo para reenviar
+        if msg_type == "message" and msg_proto == "dijkstra":
+            self._forward_packet_dijkstra(message)
+
+
+    def _forward_packet_dijkstra(self, message):
+        """Reenvía un paquete usando la tabla de ruteo de Dijkstra."""
+        to_addr = message.get("to")
+        
+        # Buscar en la tabla de ruteo
+        with self.lock:
+            routing_table = dict(self.shared_routing_table)
+        
+        if to_addr in routing_table:
+            route_info = routing_table[to_addr]
+            next_hop = route_info['next_hop']
+            interface = route_info['interface']
+            
+            # Extraer puerto de la interfaz
+            port = int(interface.split(':')[1])
+            
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] 🔄 Reenviando a {to_addr} vía {next_hop} (dist: {route_info['distance']})")
+            self.outgoing_packets_queue.put(("127.0.0.1", port, message))
+        else:
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] ❌ No hay ruta hacia {to_addr}")
+
+
+    def set_neighbor_cost_dijkstra(self, neighbor, cost):
+        if self.algorithm != "dijkstra":
+            self.log.write(f"[Nodo {self.node_id}] Comando solo disponible para Dijkstra")
+            return
+        
+        if neighbor in self.neighbors:
+            old_cost = self.neighbor_costs.get(neighbor, 1)
+            self.neighbor_costs[neighbor] = cost
+            
+            # Actualizar en el grafo de Dijkstra
+            if neighbor in self.node_to_index:
+                src_idx = self.node_to_index[self.node_id]
+                dest_idx = self.node_to_index[neighbor]
+                self.dijkstra_network.graph[src_idx][dest_idx] = cost
+            
+            # Recalcular rutas
+            self._update_dijkstra_routing_table()
+            
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Costo a {neighbor} cambiado: {old_cost} → {cost}")
+        else:
+            self.log.write(f"[Nodo {self.node_id}] [DIJKSTRA] Vecino {neighbor} no encontrado")
+
+
     def _socket_process(self):
         
         # Crear socket manager en este proceso
@@ -129,6 +491,11 @@ class Nodo:
                     self.lsp_queue.put((message, addr))
                 elif msg_type in ["hello", "routing_info", "node_discovery"]:
                     self.routing_info_queue.put((message, addr))
+            
+            elif self.algorithm == "dijkstra":
+                if msg_type in ["hello", "dijkstra_info", "topology_update", "node_discovery"]:
+                    self.routing_info_queue.put((message, addr))
+                
                     
         except Exception as e:
             print(f"[Nodo {self.node_id}] [SOCKET] Error procesando mensaje: {e}")
@@ -141,6 +508,8 @@ class Nodo:
             self._ruteo_flooding()
         elif self.algorithm == "lsr":
             self._ruteo_lsr()
+        elif self.algorithm == "dijkstra":  # AGREGAR esta línea
+            self._ruteo_dijkstra()
 
     def _ruteo_flooding(self):
         
@@ -244,6 +613,10 @@ class Nodo:
             self._forwarding_flooding()
         elif self.algorithm == "lsr":
             self._forwarding_lsr()
+        
+        elif self.algorithm == "dijkstra":
+            print("FORWRW")
+            self._forwarding_dijkstra()
 
     def _forwarding_flooding(self):
         
@@ -710,6 +1083,17 @@ class Nodo:
                 "timestamp": time.time(),
                 "payload": {"data": data}
             }
+        elif self.algorithm == "dijkstra":  # AGREGAR esta opción
+            message = {
+                "type": "message",
+                "proto": "dijkstra",
+                "from": self.my_address,
+                "to": dest_addr,
+                "msg_id": f"{self.node_id}-{int(time.time() * 1000)}",
+                "original_sender": self.my_address,
+                "timestamp": time.time(),
+                "payload": {"data": data}
+            }
         else:
             # Para otros algoritmos (LSR)
             message = Mensajes_Protocolo.create_data_message(
@@ -741,15 +1125,18 @@ class Nodo:
             self.log.write(f"[Nodo {self.node_id}] Vecino {neighbor} no encontrado")
 
     def interactive_mode(self):
-        
+
         print(f"\n=== NODO {self.node_id} - MODO INTERACTIVO ({self.algorithm.upper()}) ===")
         print("Comandos disponibles:")
         print("  send <destino> <mensaje>  - Enviar mensaje")
         print("  neighbors                 - Ver vecinos descubiertos")
         print("  table                     - Ver tabla de ruteo")
-        if self.algorithm == "lsr":
+        if self.algorithm in ["lsr", "dijkstra"]:  # MODIFICAR esta línea
             print("  cost <vecino> <costo>     - Cambiar costo de vecino")
             print("  topology                  - Ver información de topología")
+        if self.algorithm == "dijkstra":  # AGREGAR estas líneas
+            print("  graph                     - Ver matriz de adyacencia")
+            print("  calculate <destino>       - Calcular ruta específica")
         print("  quit                      - Salir")
         print("=" * 60)
         
@@ -768,7 +1155,7 @@ class Nodo:
                     with self.lock:
                         discovered = dict(self.shared_discovered_nodes)
                     print(f"Vecinos descubiertos: {list(discovered.keys())}")
-                    if self.algorithm == "lsr":
+                    if self.algorithm in ["lsr", "dijkstra"]:
                         print(f"Costos de vecinos: {self.neighbor_costs}")
                     
                 elif cmd[0] == "table":
@@ -782,21 +1169,47 @@ class Nodo:
                             distance = info.get('distance', info.get('cost', '?'))
                             print(f"  {dest} -> {info['next_hop']} (dist/cost: {distance})")
                 
-                elif cmd[0] == "cost" and len(cmd) == 3 and self.algorithm == "lsr":
+                elif cmd[0] == "cost" and len(cmd) == 3 and self.algorithm in ["lsr", "dijkstra"]:
                     neighbor = cmd[1]
                     try:
                         cost = int(cmd[2])
-                        self.set_neighbor_cost(neighbor, cost)
+                        if self.algorithm == "dijkstra":
+                            self.set_neighbor_cost_dijkstra(neighbor, cost)
+                        else:
+                            self.set_neighbor_cost(neighbor, cost)
                     except ValueError:
                         print("Error: El costo debe ser un número entero")
                 
-                elif cmd[0] == "topology" and self.algorithm == "lsr":
-                    # Mostrar información de topología conocida
+                elif cmd[0] == "graph" and self.algorithm == "dijkstra":  # AGREGAR
+                    print("Matriz de adyacencia:")
+                    print("Nodos:", [self.index_to_node[i] for i in range(len(self.index_to_node))])
+                    for i in range(self.dijkstra_network.V):
+                        row = []
+                        for j in range(self.dijkstra_network.V):
+                            cost = self.dijkstra_network.graph[i][j]
+                            if cost == float('inf'):
+                                row.append('∞')
+                            else:
+                                row.append(str(int(cost)))
+                        print(f"{self.index_to_node[i]}: {row}")
+                
+                elif cmd[0] == "calculate" and len(cmd) == 2 and self.algorithm == "dijkstra":  # AGREGAR
+                    destination = cmd[1]
+                    if destination in self.node_to_index:
+                        src_idx = self.node_to_index[self.node_id]
+                        dest_idx = self.node_to_index[destination]
+                        distance, path_indices = self.dijkstra_solver.get_shortest_path(src_idx, dest_idx)
+                        path_nodes = [self.index_to_node[i] for i in path_indices]
+                        print(f"Ruta más corta a {destination}: {' -> '.join(path_nodes)} (distancia: {distance})")
+                    else:
+                        print(f"Nodo {destination} no encontrado")
+                
+                elif cmd[0] == "topology" and self.algorithm in ["lsr", "dijkstra"]:
                     print("Información de topología conocida:")
-                    # Esta información estaría disponible en el proceso LSR
-                    # Por simplicidad, mostramos la configuración local
                     print(f"  Vecinos directos: {self.neighbors}")
                     print(f"  Costos: {self.neighbor_costs}")
+                    if self.algorithm == "dijkstra":
+                        print(f"  Nodos conocidos: {list(self.node_to_index.keys())}")
                     
                 elif cmd[0] == "quit":
                     self.stop()
@@ -810,7 +1223,6 @@ class Nodo:
                 break
             except Exception as e:
                 print(f"Error: {e}")
-
     def main_executor(self):
         
         # Marcar como ejecutándose
