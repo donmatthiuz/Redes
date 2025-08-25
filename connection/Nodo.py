@@ -247,9 +247,10 @@ class Nodo:
 
     def _forwarding_flooding(self):
         
-        # Inicializar algoritmo de flooding
-        neighbor_addresses = [self.names.get(n, f"{n}@localhost") for n in self.neighbors]
-        flooding = Flooding(self.my_address, neighbor_addresses)
+        # Inicializar algoritmo de flooding con IDs de vecinos (no direcciones)
+        flooding = Flooding(self.node_id, self.neighbors)
+        
+        self.log.write(f"[Nodo {self.node_id}] [FORWARDING-FLOODING] Flooding inicializado con vecinos: {self.neighbors}")
         
         while self.running.value:
             try:
@@ -261,8 +262,10 @@ class Nodo:
                 time.sleep(0.1)
                 
             except Exception as e:
+                self.log.write(f"[Nodo {self.node_id}] [FORWARDING-FLOODING] Error: {e}")
                 print(f"[Nodo {self.node_id}] [FORWARDING-FLOODING] Error: {e}")
                 time.sleep(1)
+
 
     def _forwarding_lsr(self):
         
@@ -455,39 +458,75 @@ class Nodo:
             self.log.write(f"[Nodo {self.node_id}] [RUTEO] No hay vecinos activos para enviar info")
 
     def _process_routing_info(self, message, addr):
+
         
         msg_type = message.get("type")
         from_addr = message.get("from")
         
-
-        
-        self.log.write(f"[Nodo {self.node_id}] [RUTEO] Procesando {msg_type} de {from_addr}")
+        self.log.write(f"[Nodo {self.node_id}] [RUTEO-FLOODING] Procesando {msg_type} de {from_addr}")
 
         if msg_type == "hello":
             # Nuevo vecino descubierto
             if from_addr and from_addr != self.my_address:
                 from_node_id = self._address_to_node_id(from_addr)
-                real_port = 5000 + ord(from_node_id) - ord('A') if from_node_id else addr[1]
-               
-                with self.lock:
-                    self.shared_discovered_nodes[from_addr] = {
+                
+                # Verificar que sea realmente nuestro vecino
+                if from_node_id in self.neighbors:
+                    real_port = 5000 + ord(from_node_id) - ord('A')
+                
+                    with self.lock:
+                        self.shared_discovered_nodes[from_addr] = {
+                            'port': real_port,
+                            'last_seen': time.time()
+                        }
+                        self.shared_neighbor_ports[from_addr] = real_port
+                    
+                    # Notificar al proceso de nuevos nodos
+                    self.new_nodes_queue.put({
+                        'node_address': from_addr,
                         'port': real_port,
-                        'last_seen': time.time()
-                    }
-                    self.shared_neighbor_ports[from_addr] = real_port
-                
-                # Notificar al proceso de nuevos nodos
-                self.new_nodes_queue.put({
-                    'node_address': from_addr,
-                    'port': real_port,
-                    'type': 'neighbor'
-                })
-                
+                        'type': 'neighbor'
+                    })
+                    
+                    self.log.write(f"[Nodo {self.node_id}] [RUTEO-FLOODING] Vecino confirmado: {from_addr} ({from_node_id})")
+                else:
+                    self.log.write(f"[Nodo {self.node_id}] [RUTEO-FLOODING] Nodo {from_node_id} no es vecino directo")
+                    
         elif msg_type == "routing_info":
-            # Información de tabla de ruteo de otro nodo
+            # Para flooding, la información de ruteo es menos crítica
+            # pero aún podemos usarla para descubrir nodos
             remote_table = message.get("routing_table", {})
-            self._merge_routing_info(from_addr, remote_table)
+            self._merge_routing_info_flooding(from_addr, remote_table)
 
+
+    def _merge_routing_info_flooding(self, from_addr, remote_table):
+
+        
+        with self.lock:
+            updated_entries = 0
+            
+            for dest_addr, remote_info in remote_table.items():
+                if dest_addr == self.my_address:
+                    continue
+                
+                # Para flooding, todas las rutas son de distancia 1 a través de vecinos
+                # o se aprenden dinámicamente
+                if dest_addr not in self.shared_routing_table:
+                    # Solo agregar si el from_addr es un vecino conocido
+                    from_node_id = self._address_to_node_id(from_addr)
+                    if from_node_id in self.neighbors:
+                        port = self.shared_neighbor_ports.get(from_addr)
+                        if port:
+                            self.shared_routing_table[dest_addr] = {
+                                'next_hop': from_addr,
+                                'distance': 2,  # A través de un vecino
+                                'interface': f"127.0.0.1:{port}",
+                                'timestamp': time.time()
+                            }
+                            updated_entries += 1
+            
+            if updated_entries > 0:
+                self.log.write(f"[Nodo {self.node_id}] [RUTEO-FLOODING] Descubiertos {updated_entries} nodos adicionales")
     def _process_new_node(self, new_node_info):
         
         node_addr = new_node_info['node_address']
@@ -566,117 +605,128 @@ class Nodo:
             if expired_entries:
                 self.log.write(f"[Nodo {self.node_id}] [RUTEO] Eliminadas {len(expired_entries)} entradas expiradas")
 
-
     def _process_incoming_packet_flooding(self, message, addr, flooding):
         
         msg_type = message.get("type")
         from_addr = message.get("from")
         to_addr = message.get("to")
+        proto = message.get("proto", "")
         
-
+        self.log.write(f"[Nodo {self.node_id}] [FORWARDING-FLOODING] Paquete: {msg_type}({proto}) de {from_addr} hacia {to_addr}")
         
-        self.log.write(f"[Nodo {self.node_id}] [FORWARDING] Paquete entrante: {msg_type} de {from_addr} hacia {to_addr}")
-
-        # Si es un mensaje de datos, usar flooding para forwarding
-        if msg_type == "message":
-            proto = message.get("proto")
+        # Solo procesar mensajes de datos con protocolo flooding
+        if msg_type == "message" and proto == "flooding":
+            # Convertir direcciones a node_id para flooding
+            from_node_id = self._address_to_node_id(from_addr) or from_addr
+            to_node_id = self._address_to_node_id(to_addr) or to_addr
             
-            if proto == "flooding":
-                # Convertir direcciones a node_id simple para flooding
-                from_node_id = self._address_to_node_id(from_addr)
-                to_node_id = self._address_to_node_id(to_addr)
-                
-                # Convertir mensaje al formato esperado por flooding
-                flooding_msg = {
-                    "msg_id": message.get("msg_id", f"{from_node_id}-{time.time()}"),
-                    "from_node": from_node_id,
-                    "to": to_node_id,
-                    "ttl": message.get("ttl", 5),
-                    "payload": message.get("payload", {}).get("data", "")
-                }
-                
-                # Procesar con flooding
-                forwards = flooding.receive_message(flooding_msg)
-                
-                # Si es para nosotros, ya flooding lo procesó
-                if to_node_id == self.node_id:
-                    return
-                
-                # Reenviar según flooding
-                for neighbor_node_id, new_msg in forwards:
-                    neighbor_addr = self.names.get(neighbor_node_id, f"{neighbor_node_id}")
-
-                    print("Address: ", neighbor_addr)
-                    self._forward_packet_flooding(neighbor_addr, new_msg)
+            # Crear mensaje en formato esperado por flooding
+            flooding_msg = {
+                "msg_id": message.get("msg_id", f"{from_node_id}-{int(time.time() * 1000)}"),
+                "from_node": from_node_id,
+                "original_sender": message.get("original_sender", from_node_id),
+                "to": to_node_id,
+                "ttl": message.get("ttl", 5),
+                "payload": message.get("payload", {}).get("data", ""),
+                "timestamp": message.get("timestamp", time.time())
+            }
+            
+            self.log.write(f"[Nodo {self.node_id}] [FORWARDING-FLOODING] Procesando con flooding: {flooding_msg['msg_id']}")
+            
+            # Procesar con flooding
+            forwards = flooding.receive_message(flooding_msg)
+            
+            # Si flooding devuelve reenvíos, procesarlos
+            for neighbor_id, flood_msg in forwards:
+                self._forward_packet_flooding(neighbor_id, flood_msg)
 
     def _address_to_node_id(self, address):
-        
+        """Convierte una dirección a node_id."""
         if not address:
             return None
         
-        # Buscar en names dict
+        # Buscar en names dict (dirección -> node_id)
         for node_id, addr in self.names.items():
             if addr == address:
                 return node_id
         
-        # Si no se encuentra, extraer de la dirección
+        # Si no se encuentra, intentar extraer de la dirección
         if "@" in address:
-            return address.split("@")[0].replace("node", "").upper()
+            node_part = address.split("@")[0]
+            # Remover 'node' si está presente y obtener la letra
+            node_id = node_part.replace("node", "").upper()
+            if len(node_id) == 1 and node_id.isalpha():
+                return node_id
+        
+        # Si es solo una letra, devolverla
+        if len(address) == 1 and address.isalpha():
+            return address.upper()
         
         return address
 
-    def _forward_packet_flooding(self, neighbor_addr, message):
+    def _forward_packet_flooding(self, neighbor_id, flood_msg):
+        """Reenvía un paquete usando flooding a un vecino específico."""
         
-        neighbor_port = None
+        # Obtener dirección del vecino
+        neighbor_addr = self.names.get(neighbor_id, f"{neighbor_id}@localhost")
+        neighbor_port = 5000 + ord(neighbor_id) - ord('A')
         
-        # Buscar puerto del vecino
-        with self.lock:
-            neighbor_ports = dict(self.shared_neighbor_ports)
+        # Convertir mensaje de flooding de vuelta al formato de protocolo
+        protocol_msg = {
+            "type": "message",
+            "proto": "flooding",
+            "from": self.names.get(flood_msg["from_node"], f"{flood_msg['from_node']}@localhost"),
+            "to": self.names.get(flood_msg["to"], f"{flood_msg['to']}@localhost"),
+            "msg_id": flood_msg["msg_id"],
+            "original_sender": flood_msg.get("original_sender", flood_msg["from_node"]),
+            "ttl": flood_msg["ttl"],
+            "timestamp": flood_msg.get("timestamp", time.time()),
+            "payload": {"data": flood_msg["payload"]}
+        }
         
-        if neighbor_addr in neighbor_ports:
-            neighbor_port = neighbor_ports[neighbor_addr]
-        else:
-            # Mapeo por defecto basado en node_id
-            for node_id, addr in self.names.items():
-                if addr == neighbor_addr:
-                    neighbor_port = 5000 + ord(node_id) - ord('A')
-                    break
+        self.log.write(f"[Nodo {self.node_id}] [FORWARDING-FLOODING] 🔄 Reenviando {flood_msg['msg_id']} a {neighbor_id} ({neighbor_port})")
         
-        if neighbor_port:
+        # Enviar mensaje
+        self.outgoing_packets_queue.put(("127.0.0.1", neighbor_port, protocol_msg))
 
-            self.log.write(f"[Nodo {self.node_id}] [FORWARDING] 🔄 Reenviando a {neighbor_addr} ({neighbor_port})")
-            # Convertir de vuelta al formato de mensaje original
-            original_msg = {
-                "type": "message",
-                "proto": "flooding",
-                "from": message["from_node"],
-                "to": message["to"],
-                "msg_id": message["msg_id"],
-                "ttl": message["ttl"],
-                "payload": {"data": message["payload"]}
-            }
-            self.outgoing_packets_queue.put(("127.0.0.1", neighbor_port, original_msg))
-        else:
-            self.log.write(f"[Nodo {self.node_id}] [FORWARDING] ❌ No se pudo determinar puerto para {neighbor_addr}")
 
     def send_data_message(self, destination, data, ttl=5):
         
+        
+        # Obtener dirección del destino
         dest_addr = self.names.get(destination, f"{destination}@localhost")
         
         # Crear mensaje usando el protocolo
-        message = Mensajes_Protocolo.create_data_message(
-            self.my_address, 
-            self.algorithm,  # Usar el algoritmo configurado
-            dest_addr, 
-            data, 
-            ttl
-        )
-        
+        if self.algorithm == "flooding":
+            # Para flooding, crear mensaje con información adicional
+            message = {
+                "type": "message",
+                "proto": "flooding",
+                "from": self.my_address,
+                "to": dest_addr,
+                "msg_id": f"{self.node_id}-{int(time.time() * 1000)}",
+                "original_sender": self.node_id,
+                "ttl": ttl,
+                "timestamp": time.time(),
+                "payload": {"data": data}
+            }
+        else:
+            # Para otros algoritmos (LSR)
+            message = Mensajes_Protocolo.create_data_message(
+                self.my_address, 
+                self.algorithm,
+                dest_addr, 
+                data, 
+                ttl
+            )
         
         self.log.write(f"[Nodo {self.node_id}] 📤 Enviando mensaje ({self.algorithm.upper()}) a {destination}: '{data}'")
-        # Enviar directamente al proceso de forwarding
+        
+        # Enviar al proceso de forwarding
         self.incoming_packets_queue.put((message, ("127.0.0.1", self.port)))
 
+
+    
     def set_neighbor_cost(self, neighbor, cost):
         
         if self.algorithm != "lsr":

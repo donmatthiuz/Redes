@@ -18,5 +18,5 @@ if __name__ == "__main__":
     algorithm = sys.argv[2].lower() if len(sys.argv) > 2 else "flooding"
     port = 5000 + ord(node_id) - ord('A')  # A=5000, B=5001, C=5002, D=5003
     
-    node = Nodo(node_id, port=port, algorithm="flooding")
+    node = Nodo(node_id, port=port, algorithm="lsr")
     node.main_executor()
