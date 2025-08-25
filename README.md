@@ -60,7 +60,3 @@ python main.py C dijkstra
 
 3. Para ejecutar múltiples nodos, abrir varias terminales y ejecutar `main.py` con diferentes `<node_id>` y algoritmos.
 
-```
-
-Si quieres, puedo hacer también **una versión resumida en una sola tabla de referencia rápida** para copiar y pegar. ¿Quieres que haga eso?
-```
