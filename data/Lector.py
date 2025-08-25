@@ -7,10 +7,9 @@ def create_sample_config():
     topo_data = {
         "type": "topo",
         "config": {
-            "A": ["B", "C"],
-            "B": ["A", "C", "D"],
-            "C": ["A", "B", "D"],
-            "D": ["B", "C"]
+            "A": ["B"],
+            "B": ["A"]
+         
         }
     }
     
@@ -19,8 +18,7 @@ def create_sample_config():
         "config": {
             "A": "nodeA@localhost",
             "B": "nodeB@localhost",
-            "C": "nodeC@localhost",
-            "D": "nodeD@localhost"
+          
         }
     }
     
