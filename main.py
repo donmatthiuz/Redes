@@ -9,14 +9,14 @@ if __name__ == "__main__":
     # Crear archivos de configuración si no existen
     create_sample_config()
     
-    if len(sys.argv) != 2:
-        print("Uso: python integrated_node.py <node_id>")
-        print("Ejemplo: python integrated_node.py A")
+    if len(sys.argv) != 3:
+        print("Uso: python main.py <node_id> <algoritmo>")
+        print("Ejemplo: python main.py A ")
         sys.exit(1)
     
     node_id = sys.argv[1].upper()
     algorithm = sys.argv[2].lower() if len(sys.argv) > 2 else "flooding"
     port = 5000 + ord(node_id) - ord('A')  # A=5000, B=5001, C=5002, D=5003
     
-    node = Nodo(node_id, port=port, algorithm="dijkstra")
+    node = Nodo(node_id, port=port, algorithm=algorithm)
     node.main_executor()
