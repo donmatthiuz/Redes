@@ -3,12 +3,17 @@ import json
 import threading
 import time
 from typing import Callable, Optional
+from dotenv import load_dotenv
+import os
 
 class RedisManager:
-    def __init__(self, host="lab3.redesuvg.cloud", port=6379, password="UVGRedis2025"):
-        self.host = host
-        self.port = port
-        self.password = password
+    def __init__(self):
+        
+        load_dotenv()
+        self.host = os.getenv("HOST", "lab3.redesuvg.cloud")
+        self.port = int(os.getenv("PORT", 6379))
+        self.password = os.getenv("PWD", "UVGRedis2025")
+
         self.redis_client = None
         self.pubsub = None
         self.running = False
@@ -69,32 +74,26 @@ class RedisManager:
     
     def _listen_messages(self):
         try:
-            for message in self.pubsub.listen():
-                if not self.running:
-                    break
-                    
-                if message['type'] == 'message':
+            while self.running:
+                message = self.pubsub.get_message(timeout=0.1)  # revisa cada 0.1s
+                if message and message['type'] == 'message':
                     channel = message['channel']
                     data = message['data']
-                    
+
                     try:
-                        # Intentar decodificar como JSON
                         parsed_message = json.loads(data)
-                        
-                        # Llamar al callback si existe
                         if self.on_message_callback:
                             self.on_message_callback(parsed_message, channel)
-                            
                     except json.JSONDecodeError:
-                        print(f" Mensaje no JSON recibido de {channel}: {data}")
-                        
+                        print(f"Mensaje no JSON recibido de {channel}: {data}")
                     except Exception as e:
-                        print(f" Error procesando mensaje de {channel}: {e}")
-                        
+                        print(f"Error procesando mensaje de {channel}: {e}")
+
         except Exception as e:
-            print(f" Error en hilo de escucha Redis: {e}")
+            print(f"Error en hilo de escucha Redis: {e}")
         finally:
-            print(" Hilo de escucha Redis terminado")
+            print("Hilo de escucha Redis terminado")
+
     
     def publish_message(self, channel: str, message: dict) -> bool:
         """
@@ -147,27 +146,30 @@ class RedisManager:
         
         return successful_sends
     
+
     def stop(self):
         print(" Deteniendo Redis Manager...")
-        self.running = False
-        
+        self.running = False  # Primero indicamos que deje de escuchar
+
+        # Esperar que el hilo termine antes de cerrar pubsub
+        if self.listen_thread and self.listen_thread.is_alive():
+            self.listen_thread.join(timeout=2)
+
         if self.pubsub:
             try:
                 self.pubsub.unsubscribe()
                 self.pubsub.close()
             except:
                 pass
-        
-        if self.listen_thread and self.listen_thread.is_alive():
-            self.listen_thread.join(timeout=2)
-        
+
         if self.redis_client:
             try:
                 self.redis_client.close()
             except:
                 pass
-        
+
         print(" Redis Manager detenido")
+
     
     def is_connected(self) -> bool:
         if not self.redis_client:
