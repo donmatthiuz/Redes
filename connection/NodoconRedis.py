@@ -484,14 +484,20 @@ class NodoRedisSimple:
         print("Comandos:")
         print("  send <destino> <mensaje>     - Enviar mensaje")
         print("  ping <destino>               - Enviar ping")
-        print("  neighbors                    - Ver vecinos activos")
-        print("  routing                      - Ver tabla de ruteo")
-        print("  topology                     - Ver topología conocida (LSR)")
+
+        if self.routing_algorithm == "flooding":
+            print("  neighbors                    - Ver vecinos activos")
+
+        if self.routing_algorithm == "lsr":
+            print("  routing                      - Ver tabla de ruteo")
+            print("  topology                     - Ver topología conocida (LSR)")
+
         print("  algorithm <flooding|lsr>     - Cambiar algoritmo")
         print("  stats                        - Estadísticas")
         print("  addresses                    - Ver direcciones")
         print("  quit                         - Salir")
         print("=" * 60)
+
         
         while self.running:
             try:
