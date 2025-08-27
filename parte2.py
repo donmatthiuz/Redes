@@ -45,5 +45,5 @@ if __name__ == "__main__":
         sys.exit(1)
     node_id = sys.argv[1].upper()
     algorithm = sys.argv[2].lower() if len(sys.argv) > 2 else "flooding"
-    node = NodoRedisSimple(node_id)
+    node = NodoRedisSimple(node_id, routing_algorithm=algorithm)
     node.run()
