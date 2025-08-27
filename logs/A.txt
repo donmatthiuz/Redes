@@ -1,34 +1,99 @@
-2025-08-24 23:07:26 - [Nodo A] Inicializado con algoritmo LSR
-2025-08-24 23:07:26 - [Nodo A] Dirección: nodeA@localhost
-2025-08-24 23:07:26 - [Nodo A] Vecinos: ['B']
-2025-08-24 23:07:26 - [Nodo A] Costos vecinos: {'B': 1}
-2025-08-24 23:07:26 - [Nodo A] [RUTEO-LSR] Proceso iniciado
-2025-08-24 23:07:26 - [Nodo A] [LSR] LSP difundido a 1 vecinos
-2025-08-24 23:07:26 - [Nodo A] Socket iniciado en proceso separado
-2025-08-24 23:07:26 - [Nodo A] [FORWARDING-LSR] Proceso iniciado
-2025-08-24 23:07:27 - [Nodo A] [SOCKET] 📨 Recibido lsp(lsr) de ('127.0.0.1', 59498)
-2025-08-24 23:07:27 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
-2025-08-24 23:07:27 - [Nodo A] [FORWARDING-LSR] Paquete: lsp de B hacia None
-2025-08-24 23:07:37 - [Nodo A] [LSR] HELLO enviado a vecinos
-2025-08-24 23:07:37 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
-2025-08-24 23:07:38 - [Nodo A] [SOCKET] 📨 Recibido hello(lsr) de ('127.0.0.1', 59501)
-2025-08-24 23:07:38 - [Nodo A] [LSR] Vecino descubierto: nodeB@localhost
-2025-08-24 23:07:38 - [Nodo A] [FORWARDING-LSR] Paquete: hello de nodeB@localhost hacia broadcast
-2025-08-24 23:07:46 - [Nodo A] 📤 Enviando mensaje (LSR) a nodeB: 'hola pos nomas'
-2025-08-24 23:07:46 - [Nodo A] [FORWARDING-LSR] Paquete: message de nodeA@localhost hacia nodeB@localhost
-2025-08-24 23:07:46 - [Nodo A] [LSR] 🔄 Reenviando a nodeB@localhost vía nodeB@localhost (5001)
-2025-08-24 23:07:46 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
-2025-08-24 23:07:47 - [Nodo A] [LSR] HELLO enviado a vecinos
-2025-08-24 23:07:47 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
-2025-08-24 23:07:48 - [Nodo A] [SOCKET] 📨 Recibido hello(lsr) de ('127.0.0.1', 59506)
-2025-08-24 23:07:48 - [Nodo A] [FORWARDING-LSR] Paquete: hello de nodeB@localhost hacia broadcast
-2025-08-24 23:07:48 - [Nodo A] [LSR] Vecino descubierto: nodeB@localhost
-2025-08-24 23:07:57 - [Nodo A] [LSR] LSP difundido a 1 vecinos
-2025-08-24 23:07:57 - [Nodo A] [LSR] HELLO enviado a vecinos
-2025-08-24 23:07:57 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
-2025-08-24 23:07:57 - [Nodo A] [SOCKET] 📤 Enviado a 127.0.0.1:5001
-2025-08-24 23:07:58 - [Nodo A] [SOCKET] 📨 Recibido lsp(lsr) de ('127.0.0.1', 59509)
-2025-08-24 23:07:58 - [Nodo A] [FORWARDING-LSR] Paquete: lsp de B hacia None
-2025-08-24 23:07:58 - [Nodo A] [SOCKET] 📨 Recibido hello(lsr) de ('127.0.0.1', 59510)
-2025-08-24 23:07:58 - [Nodo A] [LSR] Vecino descubierto: nodeB@localhost
-2025-08-24 23:07:58 - [Nodo A] [FORWARDING-LSR] Paquete: hello de nodeB@localhost hacia broadcast
+=== LOG INICIADO ===
+2025-08-27 00:17:17 - [Nodo A] Inicializado - Dirección: sec10.grupo4.cor22982
+2025-08-27 00:17:17 - [Nodo A] Vecinos: {'B': 'sec10.grupo4.cor22986'}
+2025-08-27 00:17:17 - [Nodo A] Redis configurado - Canal: A
+2025-08-27 00:17:17 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:17:17 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:17:17 - [Nodo A] Nodo iniciado correctamente
+2025-08-27 00:17:17 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:17:17 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:17:20 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:17:20 - [Nodo A] Vecino activo: B
+2025-08-27 00:17:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:17:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:17:47 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:17:47 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:17:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:17:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:18:17 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:18:17 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:18:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:18:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:18:47 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:18:47 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:18:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:18:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:19:17 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:19:17 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:19:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:19:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:19:47 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:19:47 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:19:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:19:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:20:17 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:20:17 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:20:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:20:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:20:47 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:20:47 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:20:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:20:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:21:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:21:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:21:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:21:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:21:48 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:21:48 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:21:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:21:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:22:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:22:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:22:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:22:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:22:33 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:22:33 - [Nodo A] Mensaje iniciado hacia sec10.grupo4.cor22986: 'hola' (1 reenvíos)
+2025-08-27 00:22:37 - [Nodo A] Mensaje iniciado hacia sec10.grupo4.cor22982: 'hola' (0 reenvíos)
+2025-08-27 00:22:41 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:22:41 - [Nodo A] Mensaje iniciado hacia sec10.grupo4.cor22986: 'dfafd' (1 reenvíos)
+2025-08-27 00:22:48 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:22:48 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:22:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:22:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:23:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:23:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:23:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:23:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:23:48 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:23:48 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:23:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:23:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:24:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:24:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:24:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:24:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:24:48 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:24:48 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:24:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:24:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:25:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:25:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:25:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:25:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:25:48 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:25:48 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:25:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:25:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:26:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:26:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:26:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:26:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:26:48 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:26:48 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:26:51 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:26:51 - [Nodo A] Vecino activo: B
+2025-08-27 00:27:18 - [Nodo A] Mensaje enviado a B
+2025-08-27 00:27:18 - [Nodo A] HELLO enviado a 1/1 vecinos
+2025-08-27 00:27:21 - [Nodo A] Mensaje flooding/hello recibido de sec10.grupo4.cor22986
+2025-08-27 00:27:21 - [Nodo A] Vecino activo: B
+2025-08-27 00:27:38 - [Nodo A] Nodo detenido

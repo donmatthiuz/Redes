@@ -10,9 +10,9 @@ class RedisManager:
     def __init__(self):
         
         load_dotenv()
-        self.host = os.getenv("HOST", "lab3.redesuvg.cloud")
-        self.port = int(os.getenv("PORT", 6379))
-        self.password = os.getenv("PWD", "UVGRedis2025")
+        self.host = "lab3.redesuvg.cloud"
+        self.port = 6379
+        self.password = "UVGRedis2025"
 
         self.redis_client = None
         self.pubsub = None

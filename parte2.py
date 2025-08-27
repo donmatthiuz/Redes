@@ -1,7 +1,7 @@
 import time
 import sys
 from connection.redis_manager import RedisManager
-from connection.NodoconRedis import NodoRedis
+from connection.NodoconRedis import NodoRedisSimple
 
 def message_handler(msg, channel):
     print(f"Mensaje recibido en {channel}: {msg}")
@@ -45,5 +45,5 @@ if __name__ == "__main__":
         sys.exit(1)
     node_id = sys.argv[1].upper()
     algorithm = sys.argv[2].lower() if len(sys.argv) > 2 else "flooding"
-    node = NodoRedis(node_id, algorithm=algorithm)
-    node.main_executor()
+    node = NodoRedisSimple(node_id)
+    node.run()

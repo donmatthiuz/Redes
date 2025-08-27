@@ -2,6 +2,6 @@
   "type": "names",
   "config": {
     "A": "sec10.grupo4.cor22982",
-    "B": "sec10.grupo7.sol22952"
+    "B": "sec10.grupo4.cor22986"
   }
 }

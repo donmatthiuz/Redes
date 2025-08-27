@@ -1038,7 +1038,6 @@ class Nodo:
         return address
 
     def _forward_packet_flooding(self, neighbor_id, flood_msg):
-        """Reenvía un paquete usando flooding a un vecino específico."""
         
         # Obtener dirección del vecino
         neighbor_addr = self.names.get(neighbor_id, f"{neighbor_id}@localhost")
