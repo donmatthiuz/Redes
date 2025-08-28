@@ -20,7 +20,7 @@ class Messages:
         }
     
     @staticmethod
-    def create_hello_message(from_addr, to_addr, algorithm="flooding", seq=None):
+    def create_hello_message(from_addr, to_addr, algorithm="flooding", seq=None, hops = 4):
         """Crear mensaje HELLO"""
         if seq is None:
             seq = int(time.time() * 1_000_000)
@@ -33,12 +33,12 @@ class Messages:
                 "seq": seq,
                 "ts": time.time()
             },
-            hops=4,
+            hops=hops,
             headers=[{"alg": algorithm}]
         )
     
     @staticmethod
-    def create_echo_message(from_addr, to_addr, seq, original_ts, algorithm="flooding"):
+    def create_echo_message(from_addr, to_addr, seq, original_ts, algorithm="flooding", hops= 4):
         """Crear mensaje ECHO"""
         return Messages.create_message(
             msg_type="echo",
@@ -48,7 +48,7 @@ class Messages:
                 "seq": seq,
                 "ts": original_ts
             },
-            hops=4,
+            hops=hops,
             headers=[{"alg": algorithm}]
         )
     
@@ -56,7 +56,7 @@ class Messages:
     def create_data_message(from_addr, to_addr, data, algorithm="flooding", hops=10):
         """Crear mensaje de datos"""
         return Messages.create_message(
-            msg_type="data",
+            msg_type="message",
             from_addr=from_addr,
             to_addr=to_addr,
             payload=data,

@@ -1,5 +1,7 @@
 import time
 import json
+from connection.Mensajes import Messages
+from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA
 
 class Flooding:
     """Algoritmo de Flooding para el protocolo de red"""
@@ -137,26 +139,27 @@ class Flooding:
         
         self.stats["messages_delivered"] += 1
         
-        if msg_type == "message":
-            node.log_message(f"[FLOODING] MENSAJE RECIBIDO de {from_addr}: {payload}")
+        if msg_type in MENSAJE:
+            node.log_message(f"[FLOODING] MENSAJE RECIBIDO de {from_addr}: {msg}")
             print(f"[{node.node_id}] >>> MENSAJE: {payload}")
-        elif msg_type == "hello":
+        elif msg_type in HOLA:
             node.handle_hello_received(msg)
-        elif msg_type == "echo":
+        elif msg_type in ECHO:
             node.handle_echo_received(msg)
-        elif msg_type == "info":
+        elif msg_type in INFO:
             node.log_message(f"[FLOODING] INFO RECIBIDO de {from_addr}: {payload}")
     
     def create_data_message(self, from_addr, to_addr, data, hops=10):
         """Crear mensaje de datos para envío"""
-        return {
-            "type": "message",
-            "from": from_addr,
-            "to": to_addr,
-            "hops": hops,
-            "headers": [{"alg": "flooding"}],
-            "payload": data
-        }
+
+        return Messages.create_data_message(
+            from_addr=from_addr,
+            to_addr=to_addr,
+            data=data,
+            algorithm="flooding",
+            hops=hops
+        )
+        
     
     def get_stats(self):
         """Obtener estadísticas del algoritmo"""

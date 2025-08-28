@@ -4,6 +4,9 @@ import json
 from typing import Dict, List, Set, Optional
 from connection.redis_manager import RedisManager
 from algoritmos.Flodding import Flooding  # Importar la clase que creaste
+from logs.Logs import Log
+from connection.Mensajes import Messages
+from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA
 
 class NeighborMetrics:
     def __init__(self):
@@ -22,6 +25,7 @@ class NodoRedisFlooding:
         self.names = {}
         self.neighbor_ids = []
         self.my_address = None
+        self.log = Log(f"./logs/{node_id}.txt")
         
         # Algoritmos de ruteo (preparado para extensión)
         self.algorithms = {
@@ -134,13 +138,8 @@ class NodoRedisFlooding:
         """Escribir mensaje al log"""
         timestamp = time.strftime("%H:%M:%S")
         log_line = f"[{timestamp}] {message}"
-        # print(log_line)  # También imprimir en consola
-        
-        try:
-            with open(self.log_file, 'a') as f:
-                f.write(log_line + "\n")
-        except:
-            pass
+        self.log.write(log_line)
+
     
     def setup_redis(self):
         """Configurar conexión Redis"""
@@ -170,7 +169,7 @@ class NodoRedisFlooding:
         """Callback para mensajes recibidos desde Redis"""
         try:
             self.stats["messages_received"] += 1
-            self.log_message(f"[REDIS] Mensaje recibido en {channel}: {message.get('type', 'unknown')}")
+            self.log_message(f"[REDIS] Mensaje recibido en {channel}: {message}")
             self.handle_received_message(message)
         except Exception as e:
             self.log_message(f"[REDIS] Error procesando mensaje: {e}")
@@ -233,14 +232,14 @@ class NodoRedisFlooding:
             seq = payload.get("seq")
             ts = payload.get("ts")
             if seq and ts:
-                echo_msg = {
-                    "type": "echo",
-                    "from": self.my_address,
-                    "to": from_addr,
-                    "hops": 4,
-                    "headers": [{"alg": self.current_algorithm}],
-                    "payload": {"seq": seq, "ts": ts}
-                }
+                echo_msg = Messages.create_echo_message(
+                    from_addr=self.my_address,
+                    to_addr=from_addr,
+                    hops=4,
+                    algorithm=self.current_algorithm,
+                    seq=seq, original_ts=ts
+                    
+                )
                 self.send_to_neighbor(neighbor_id, echo_msg)
     
     def handle_echo_received(self, msg):
@@ -292,11 +291,11 @@ class NodoRedisFlooding:
                 self.log_message(f"[FORWARDING] Procesando {msg_type} de {from_addr}")
                 
                 # Manejar diferentes tipos de mensajes
-                if msg_type == "hello":
+                if msg_type in HOLA:
                     self.handle_hello_received(message)
-                elif msg_type == "echo":
+                elif msg_type in ECHO:
                     self.handle_echo_received(message)
-                elif msg_type == "message":
+                elif msg_type in MENSAJE:
                     # Usar algoritmo actual para procesar
                     current_alg = self.algorithms.get(self.current_algorithm)
                     if current_alg and hasattr(current_alg, 'process_message'):
@@ -376,17 +375,16 @@ class NodoRedisFlooding:
                 for neighbor_id in self.neighbor_ids:
                     neighbor_addr = self.names.get(neighbor_id)
                     if neighbor_addr:
-                        hello_msg = {
-                            "type": "hello",
-                            "from": self.my_address,
-                            "to": neighbor_addr,
-                            "hops": 4,
-                            "headers": [{"alg": self.current_algorithm}],
-                            "payload": {
-                                "seq": seq_counter,
-                                "ts": time.time()
-                            }
-                        }
+
+                        hello_msg = Messages.create_hello_message(
+                            from_addr=self.my_address,
+                            to_addr=neighbor_addr,
+                            hops=4,
+                            algorithm=self.current_algorithm,
+                            seq=seq_counter
+                            
+                        )
+                        
                         
                         if self.send_to_neighbor(neighbor_id, hello_msg):
                             self.stats["hello_sent"] += 1
@@ -452,14 +450,15 @@ class NodoRedisFlooding:
                 dest_addr = destination
             
             # Crear mensaje
-            message = {
-                "type": "message",
-                "from": self.my_address,
-                "to": dest_addr,
-                "hops": 10,
-                "headers": [{"alg": self.current_algorithm}],
-                "payload": payload
-            }
+
+            message = Messages.create_data_message(
+                from_addr=self.my_address,
+                to_addr=dest_addr,
+                hops=10,
+                algorithm=self.current_algorithm,
+                data=payload
+            )
+            
             
             # Procesar con algoritmo actual
             current_alg = self.algorithms.get(self.current_algorithm)
