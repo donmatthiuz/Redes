@@ -75,6 +75,28 @@ class NodoRedisSimple:
         else:
             self.lsr = None
 
+        if self.routing_algorithm == "dijkstra":
+            num_vertices = len(self.topology)
+            red = Red(num_vertices)  # Tu clase Red debe tener red.graph y red.V
+
+            # Mapear node_id a índice
+            self.node_to_index = {node_id: i for i, node_id in enumerate(self.topology.keys())}
+            self.index_to_node = {i: node_id for node_id, i in self.node_to_index.items()}
+
+            # Agregar aristas con peso 1
+            for node_id, neighbors in self.topology.items():
+                u = self.node_to_index[node_id]
+                for neighbor_id in neighbors:
+                    v = self.node_to_index[neighbor_id]
+                    red.add_edge(u, v, 1)  # peso por defecto
+
+            self.dijkstra_solver = SolveDjstra(red)
+
+            # Calcular tabla inicial desde este nodo
+            self.dijkstra = self.dijkstra_solver.get_routing_table(self.node_to_index[self.node_id])
+        else:
+            self.dijkstra = None
+
     def _setup_redis(self):
         """Configurar Redis"""
         try:
@@ -120,7 +142,6 @@ class NodoRedisSimple:
     # ================== PROCESO DE FORWARDING ==================
     
     def _forwarding_process(self, message, channel):
-        """Proceso de Forwarding - Manejo de paquetes entrantes"""
         try:
             if not self._validate_message_format(message):
                 return
@@ -132,21 +153,60 @@ class NodoRedisSimple:
             
             self.log.write(f"[FORWARDING] Mensaje {proto}/{msg_type} de {from_addr} para {to_addr}")
             
-            # Determinar el tipo de paquete y procesarlo
-            if proto == "flooding":
-                self._handle_flooding_packet(message)
-            elif proto == "lsr":
-                self._handle_lsr_packet(message)
-            elif proto == "data":
+            # Clasificar por tipo
+            if msg_type == "hello":
+                self._handle_hello_packet(message)  # Maneja hello normal, ping y pong
+            elif msg_type == "message":
                 self._handle_data_packet(message)
-            elif proto == "hello" or msg_type == "ping":
-                self._handle_hello_ping_packet(message)
+            elif msg_type == "lsp" and proto == "lsr":
+                self._handle_lsr_packet(message)
             else:
-                self.log.write(f"[FORWARDING] Protocolo {proto} no soportado")
+                self.log.write(f"[FORWARDING] Tipo de mensaje {msg_type} no soportado")
                 
         except Exception as e:
             self.log.write(f"[FORWARDING] ERROR procesando mensaje: {e}")
 
+    def _handle_hello_packet(self, message):
+        from_addr = message.get("from", "")
+        headers = message.get("headers", [])
+        
+        # Verificar si es un ping (buscar header de ping)
+        is_ping = any("ping" in header and header["ping"] == "request" for header in headers)
+        is_pong = any("ping" in header and header["ping"] == "response" for header in headers)
+        
+        if is_ping:
+            # Es un ping, responder con pong
+            pong_msg = {
+                "proto": self.routing_algorithm,
+                "type": "hello",  # ✅ Usar "hello"
+                "from": self.my_address,
+                "to": from_addr,
+                "ttl": 5,
+                "headers": [{"ping": "response"}],  # Header para identificar que es pong
+                "payload": f"Pong from {self.node_id}"
+            }
+            
+            neighbor_id = self._get_node_id_by_address(from_addr)
+            if neighbor_id:
+                self._send_to_neighbor(neighbor_id, pong_msg)
+                
+        elif is_pong:
+            # Es un pong, mostrar resultado
+            payload = message.get("payload", "")
+            self.log.write(f"[FORWARDING] PONG RECIBIDO: {payload}")
+            print(f"[{self.node_id}] <<< PONG: {payload}")
+            
+        else:
+            # Es un hello normal (para flooding)
+            proto = message.get("proto", "")
+            if proto == "flooding" or proto == self.routing_algorithm:
+                if self.flooding.process_hello(message):
+                    neighbor_id = self._get_node_id_by_address(from_addr)
+                    if neighbor_id:
+                        with self.lock:
+                            self.active_neighbors.add(neighbor_id)
+                        self.log.write(f"[FORWARDING] Vecino activo: {neighbor_id}")
+                        
     def _handle_flooding_packet(self, message):
         """Manejar paquetes de flooding"""
         msg_type = message.get("type", "")
@@ -183,9 +243,13 @@ class NodoRedisSimple:
             threading.Thread(target=self._process_lsp_in_routing, args=(message,), daemon=True).start()
 
     def _handle_data_packet(self, message):
-        """Manejar paquetes de datos"""
+        msg_type = message.get("type", "")
         to_addr = message.get("to", "")
         payload = message.get("payload", "")
+        
+        # Solo procesar si es tipo "message"
+        if msg_type != "message":
+            return
         
         # ¿Es para nosotros?
         if to_addr == self.my_address or to_addr == self.node_id:
@@ -195,27 +259,7 @@ class NodoRedisSimple:
             # Forward usando la tabla de ruteo actual
             self._forward_data_packet(message)
 
-    def _handle_hello_ping_packet(self, message):
-        """Manejar paquetes Hello/Ping"""
-        from_addr = message.get("from", "")
-        msg_type = message.get("type", "")
-        
-        if msg_type == "ping":
-            # Responder ping
-            pong_msg = {
-                "proto": "hello",
-                "type": "pong", 
-                "from": self.my_address,
-                "to": from_addr,
-                "ttl": 5,
-                "headers": [],
-                "payload": f"Pong from {self.node_id}"
-            }
-            
-            neighbor_id = self._get_node_id_by_address(from_addr)
-            if neighbor_id:
-                self._send_to_neighbor(neighbor_id, pong_msg)
-
+    
     def _forward_data_packet(self, message):
         """Forward de paquetes de datos usando tabla de ruteo"""
         to_addr = message.get("to", "")
@@ -235,6 +279,30 @@ class NodoRedisSimple:
                     if neighbor_id:
                         self._send_to_neighbor(neighbor_id, forward_msg)
                 return
+            elif self.routing_algorithm == "dijkstra" and self.dijkstra_solver:
+                dest_node_id = self._get_node_id_by_address(to_addr) or to_addr
+                dest_index = self.node_to_index.get(dest_node_id)
+
+                if dest_index is None:
+                    self.log.write(f"[FORWARDING] Destino {dest_node_id} no encontrado en topología")
+                    return
+
+                src_index = self.node_to_index[self.node_id]
+                table = self.dijkstra_solver.get_routing_table(src_index)
+                next_hop_index = table.get(dest_index, {}).get("next_hop")
+
+                if next_hop_index is not None and next_hop_index != -1:
+                    next_hop_node = self.index_to_node[next_hop_index]
+                    message["ttl"] -= 1
+                    if message["ttl"] > 0:
+                        self._send_to_neighbor(next_hop_node, message)
+                        self.log.write(f"[FORWARDING] Datos reenviados a {next_hop_node} hacia {dest_node_id} (Dijkstra)")
+                    else:
+                        self.log.write(f"[FORWARDING] TTL agotado, descartando paquete")
+                else:
+                    self.log.write(f"[FORWARDING] No hay ruta hacia {dest_node_id} (Dijkstra)")
+
+
         
         if next_hop:
             # Decrementar TTL
@@ -247,6 +315,29 @@ class NodoRedisSimple:
         else:
             self.log.write(f"[FORWARDING] No hay ruta a {dest_node_id}")
 
+
+    def _compute_dijkstra_table(self):
+        """
+        Calcula la tabla de ruteo usando Dijkstra y mapea índices a node_id.
+        Retorna un diccionario {dest_node_id: {next_hop, distance, reachable}}
+        """
+        # Obtener tabla de Dijkstra con índices
+        table_indices = self.dijkstra_solver.get_routing_table(self.node_to_index[self.node_id])
+        
+        table_node_ids = {}
+        for dest_idx, info in table_indices.items():
+            dest_id = self.index_to_node[dest_idx]  # Convertir índice a node_id
+            next_hop_idx = info['next_hop']
+            next_hop_id = self.index_to_node[next_hop_idx] if next_hop_idx != -1 else -1
+            
+            table_node_ids[dest_id] = {
+                'next_hop': next_hop_id,
+                'distance': info['distance'],
+                'reachable': info['reachable']
+            }
+        
+        return table_node_ids
+
     # ================== PROCESO DE RUTEO ==================
     
     def _routing_process(self):
@@ -257,6 +348,10 @@ class NodoRedisSimple:
                     self._lsr_routing_cycle()
                 elif self.routing_algorithm == "flooding":
                     self._flooding_routing_cycle()
+                elif self.routing_algorithm == "dijkstra" and self.dijkstra_solver:
+                    with self.routing_lock:
+                        self.routing_table = self._compute_dijkstra_table()
+
                     
                 time.sleep(10)  # Ciclo cada 10 segundos
                 
@@ -354,7 +449,7 @@ class NodoRedisSimple:
             
             # Crear mensaje de datos
             message = {
-                "proto": "data",
+                "proto": self.routing_algorithm,  
                 "type": "message",
                 "from": self.my_address,
                 "to": destination_addr,
@@ -390,6 +485,28 @@ class NodoRedisSimple:
                 else:
                     self.log.write(f"[Nodo {self.node_id}] No hay ruta LSR hacia {dest_node_id}")
             
+            elif self.routing_algorithm == "dijkstra" and self.dijkstra_solver:
+                dest_node_id = self._get_node_id_by_address(destination_addr) or destination_input
+                dest_index = self.node_to_index.get(dest_node_id)
+                src_index = self.node_to_index[self.node_id]
+
+                if dest_index is None:
+                    self.log.write(f"[Nodo {self.node_id}] Destino no válido para Dijkstra: {destination_addr}")
+                    return
+
+                table = self.dijkstra_solver.get_routing_table(src_index)
+                next_hop_index = table.get(dest_index, {}).get("next_hop")
+
+                if next_hop_index is not None and next_hop_index != -1:
+                    next_hop_node = self.index_to_node[next_hop_index]
+                    if self._send_to_neighbor(next_hop_node, message):
+                        self.log.write(f"[Nodo {self.node_id}] Mensaje (Dijkstra) hacia {destination_addr} vía {next_hop_node}: '{payload}'")
+                    else:
+                        self.log.write(f"[Nodo {self.node_id}] Error enviando hacia {next_hop_node}")
+                else:
+                    self.log.write(f"[Nodo {self.node_id}] No hay ruta Dijkstra hacia {dest_node_id}")
+
+            
         except Exception as e:
             self.log.write(f"[Nodo {self.node_id}] ERROR enviando mensaje: {e}")
 
@@ -406,8 +523,8 @@ class NodoRedisSimple:
                 return
             
             ping_msg = {
-                "proto": "hello",
-                "type": "ping",
+                "proto": self.routing_algorithm,  # ✅ Usar algoritmo actual
+                 "type": "hello",
                 "from": self.my_address,
                 "to": destination_addr,
                 "ttl": 5,
@@ -423,7 +540,7 @@ class NodoRedisSimple:
 
     def switch_routing_algorithm(self, algorithm):
         """Cambiar algoritmo de ruteo en runtime"""
-        if algorithm not in ["flooding", "lsr"]:
+        if algorithm not in ["flooding", "lsr", "dijkstra"]:
             print(f"Algoritmo no válido: {algorithm}")
             return False
             
@@ -438,7 +555,10 @@ class NodoRedisSimple:
         if algorithm == "lsr" and self.lsr is None:
             neighbor_costs = {neighbor_id: 1 for neighbor_id in self.neighbor_ids}
             self.lsr = LSR(self.node_id, neighbor_costs)
-            
+        
+        if algorithm == "dijkstra" and self.dijkstra is None:
+            red = Red(self.topology)
+            self.dijkstra = SolveDjstra(red)
         with self.routing_lock:
             self.routing_table.clear()
             
@@ -492,6 +612,9 @@ class NodoRedisSimple:
             print("  routing                      - Ver tabla de ruteo")
             print("  topology                     - Ver topología conocida (LSR)")
 
+        if self.routing_algorithm == "dijkstra":
+            print("  routing                      - Ver tabla de ruteo (Dijkstra)")
+
         print("  algorithm <flooding|lsr>     - Cambiar algoritmo")
         print("  stats                        - Estadísticas")
         print("  addresses                    - Ver direcciones")
@@ -522,7 +645,20 @@ class NodoRedisSimple:
                     
                 elif cmd[0] == "routing":
                     with self.routing_lock:
-                        if self.routing_table:
+                        if self.routing_algorithm == "dijkstra" and self.dijkstra_solver:
+                            # ✅ Usar dijkstra_solver y convertir node_id a índice
+                            src_index = self.node_to_index[self.node_id]
+                            table_indices = self.dijkstra_solver.get_routing_table(src_index)
+                            
+                            print("Tabla de Ruteo (Dijkstra):")
+                            for dest_idx, info in table_indices.items():
+                                dest_node = self.index_to_node[dest_idx]
+                                next_hop_idx = info["next_hop"]
+                                next_hop_node = self.index_to_node[next_hop_idx] if next_hop_idx != -1 else "N/A"
+                                status = "alcanzable" if info["reachable"] else "inaccesible"
+                                print(f"  {dest_node} -> next_hop: {next_hop_node}, distancia: {info['distance']} ({status})")
+                                
+                        elif self.routing_algorithm == "lsr" and self.routing_table:
                             print("Tabla de Ruteo:")
                             for dest, info in self.routing_table.items():
                                 print(f"  {dest} -> next_hop: {info['next_hop']}, cost: {info['cost']}")
@@ -574,6 +710,49 @@ class NodoRedisSimple:
             except Exception as e:
                 print(f"Error: {e}")
 
+    def switch_routing_algorithm(self, algorithm):
+        if algorithm not in ["flooding", "lsr", "dijkstra"]:
+            print(f"Algoritmo no válido: {algorithm}")
+            return False
+            
+        if algorithm == self.routing_algorithm:
+            print(f"Ya usando algoritmo {algorithm}")
+            return True
+            
+        old_alg = self.routing_algorithm
+        self.routing_algorithm = algorithm
+        
+        # Reinicializar algoritmos si es necesario
+        if algorithm == "lsr" and self.lsr is None:
+            neighbor_costs = {neighbor_id: 1 for neighbor_id in self.neighbor_ids}
+            self.lsr = LSR(self.node_id, neighbor_costs)
+        
+        # ✅ Corrección aquí
+        if algorithm == "dijkstra" and self.dijkstra_solver is None:
+            num_vertices = len(self.topology)
+            red = Red(num_vertices)
+            
+            # Mapear node_id a índice si no existe
+            if not hasattr(self, 'node_to_index'):
+                self.node_to_index = {node_id: i for i, node_id in enumerate(self.topology.keys())}
+                self.index_to_node = {i: node_id for node_id, i in self.node_to_index.items()}
+            
+            # Agregar aristas con peso 1
+            for node_id, neighbors in self.topology.items():
+                u = self.node_to_index[node_id]
+                for neighbor_id in neighbors:
+                    v = self.node_to_index[neighbor_id]
+                    red.add_edge(u, v, 1)
+            
+            self.dijkstra_solver = SolveDjstra(red)
+        
+        with self.routing_lock:
+            self.routing_table.clear()
+            
+        self.log.write(f"[Nodo {self.node_id}] Algoritmo cambiado: {old_alg} → {algorithm}")
+        print(f"Algoritmo de ruteo cambiado a: {algorithm}")
+        return True
+    
     def run(self):
         """Ejecutar el nodo"""
         try:
