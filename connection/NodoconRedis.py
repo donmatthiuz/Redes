@@ -62,6 +62,13 @@ class NodoRedisSimple:
         self.log.write(f"[Nodo {self.node_id}] Dirección: {self.my_address}")
         self.log.write(f"[Nodo {self.node_id}] Vecinos: {self.neighbors}")
 
+        self.stats = {
+            "messages_sent": 0,
+            "messages_received": 0,
+            "messages_forwarded": 0,
+            "latency_samples": []
+        }
+
     def _init_routing_algorithms(self):
         """Inicializar algoritmos de ruteo"""
         # Flooding (siempre disponible)
@@ -142,6 +149,9 @@ class NodoRedisSimple:
     # ================== PROCESO DE FORWARDING ==================
     
     def _forwarding_process(self, message, channel):
+        start_time = time.time()
+        self.stats["messages_received"] += 1
+        
         try:
             if not self._validate_message_format(message):
                 return
@@ -162,9 +172,15 @@ class NodoRedisSimple:
                 self._handle_lsr_packet(message)
             else:
                 self.log.write(f"[FORWARDING] Tipo de mensaje {msg_type} no soportado")
-                
+        
         except Exception as e:
             self.log.write(f"[FORWARDING] ERROR procesando mensaje: {e}")
+        
+        finally:
+            # Guardar tiempo de procesamiento
+            end_time = time.time()
+            self.stats["latency_samples"].append(end_time - start_time)
+
 
     def _handle_hello_packet(self, message):
         from_addr = message.get("from", "")
@@ -301,6 +317,8 @@ class NodoRedisSimple:
                         self.log.write(f"[FORWARDING] TTL agotado, descartando paquete")
                 else:
                     self.log.write(f"[FORWARDING] No hay ruta hacia {dest_node_id} (Dijkstra)")
+                self.stats["messages_forwarded"] += 1
+                return super()._forward_data_packet(message)
 
 
         
@@ -315,6 +333,15 @@ class NodoRedisSimple:
         else:
             self.log.write(f"[FORWARDING] No hay ruta a {dest_node_id}")
 
+
+    def print_stats(self):
+        avg_latency = (sum(self.stats["latency_samples"]) / len(self.stats["latency_samples"])
+                       if self.stats["latency_samples"] else 0)
+        print(f"📊 Estadísticas nodo {self.node_id}:")
+        print(f"  Enviados:   {self.stats['messages_sent']}")
+        print(f"  Recibidos:  {self.stats['messages_received']}")
+        print(f"  Reenviados: {self.stats['messages_forwarded']}")
+        print(f"  Latencia promedio: {avg_latency:.4f} seg")
 
     def _compute_dijkstra_table(self):
         """
@@ -676,6 +703,9 @@ class NodoRedisSimple:
                 elif cmd[0] == "algorithm" and len(cmd) >= 2:
                     new_alg = cmd[1]
                     self.switch_routing_algorithm(new_alg)
+                elif cmd[0] == "perf":
+                    self.print_stats()
+
                     
                 elif cmd[0] == "stats":
                     print(f"Algoritmo actual: {self.routing_algorithm}")
