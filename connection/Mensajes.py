@@ -1,42 +1,93 @@
-
-
 import time
- 
-class Mensajes_Protocolo ():
+
+class Messages:
     def __init__(self):
         pass
-
-    def crear_mensaje(proto, msg_type, from_addr, to_addr, payload, ttl=5, headers=None):
+    
+    @staticmethod
+    def create_message(msg_type, from_addr, to_addr, payload, hops=10, headers=None):
+        """Crear mensaje con el nuevo formato de protocolo"""
         if headers is None:
             headers = []
-            
+        
         return {
-            "proto": proto,
             "type": msg_type,
             "from": from_addr,
             "to": to_addr,
-            "ttl": ttl,
+            "hops": hops,
             "headers": headers,
-            "payload": payload,
-            "timestamp": time.time()
+            "payload": payload
         }
     
-    def create_hello_message(from_addr, protocolo):
-        return Mensajes_Protocolo.crear_mensaje(
-            proto=protocolo,
+    @staticmethod
+    def create_hello_message(from_addr, to_addr, algorithm="flooding", seq=None):
+        """Crear mensaje HELLO"""
+        if seq is None:
+            seq = int(time.time() * 1_000_000)
+            
+        return Messages.create_message(
             msg_type="hello",
             from_addr=from_addr,
-            to_addr="broadcast",
-            payload={"action": "discover", "node_id": from_addr}
+            to_addr=to_addr,  # Dirección específica del vecino
+            payload={
+                "seq": seq,
+                "ts": time.time()
+            },
+            hops=4,
+            headers=[{"alg": algorithm}]
         )
     
-
-    def create_data_message(from_addr,protocolo, to_addr, data, ttl=5):
-        return Mensajes_Protocolo.crear_mensaje(
-            proto=protocolo,
-            msg_type="message",
+    @staticmethod
+    def create_echo_message(from_addr, to_addr, seq, original_ts, algorithm="flooding"):
+        """Crear mensaje ECHO"""
+        return Messages.create_message(
+            msg_type="echo",
             from_addr=from_addr,
             to_addr=to_addr,
-            payload={"data": data},
-            ttl=ttl
+            payload={
+                "seq": seq,
+                "ts": original_ts
+            },
+            hops=4,
+            headers=[{"alg": algorithm}]
+        )
+    
+    @staticmethod
+    def create_data_message(from_addr, to_addr, data, algorithm="flooding", hops=10):
+        """Crear mensaje de datos"""
+        return Messages.create_message(
+            msg_type="data",
+            from_addr=from_addr,
+            to_addr=to_addr,
+            payload=data,
+            hops=hops,
+            headers=[{"alg": algorithm}]
+        )
+    
+    @staticmethod
+    def create_info_message(from_addr, to_addr, info_data, algorithm="flooding", hops=10):
+        """Crear mensaje de información"""
+        return Messages.create_message(
+            msg_type="info",
+            from_addr=from_addr,
+            to_addr=to_addr,
+            payload=info_data,
+            hops=hops,
+            headers=[{"alg": algorithm}]
+        )
+    
+    @staticmethod
+    def create_lsp_message(from_addr, to_addr, neighbors_data, sequence, algorithm="lsr", hops=10):
+        """Crear mensaje LSP para LSR"""
+        return Messages.create_message(
+            msg_type="info",  # LSP usa tipo "info"
+            from_addr=from_addr,
+            to_addr=to_addr,  # Dirección específica del vecino
+            payload={
+                "type": "lsp",
+                "neighbors": neighbors_data,
+                "sequence": sequence
+            },
+            hops=hops,
+            headers=[{"alg": algorithm}, {"lsp": True}]
         )
