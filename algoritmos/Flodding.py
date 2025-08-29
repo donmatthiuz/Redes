@@ -155,7 +155,7 @@ class Flooding:
         mensaje = Messages.create_data_message(
             from_addr=from_addr,
             to_addr=to_addr,
-            data=data,
+            payload=data,
             algorithm="flooding",
             hops=hops
         )

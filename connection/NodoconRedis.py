@@ -211,63 +211,37 @@ class Nodo_Redis:
             return False
     
     def handle_hello_received(self, msg):
-        """Manejar HELLO recibido"""
-        from_addr = msg.get("from", "")
-        payload = msg.get("payload", {})
+        from_addr = msg.get("from")    
         
-        # Encontrar neighbor_id por dirección
-        neighbor_id = None
-        for nid, addr in self.names.items():
-            if addr == from_addr:
-                neighbor_id = nid
-                break
+        neighbor_id = self.addr_to_id(from_addr)
+        if neighbor_id:
+            metrics = self.neighbor_metrics[neighbor_id]
+            metrics.last_seen = time.time()
+            metrics.last_hello = time.time()
         
-        if neighbor_id and neighbor_id in self.neighbor_metrics:
-            # Actualizar métricas
-            self.neighbor_metrics[neighbor_id].last_seen = time.time()
-            self.neighbor_metrics[neighbor_id].last_hello = time.time()
+            echo_msg = Messages.create_echo_message(
+                from_addr=self.my_address,
+                to_addr=from_addr,
+                algorithm=self.current_algorithm,hops=0)
+
+            self.send_to_neighbor(neighbor_id, echo_msg)
             
-            self.stats["hello_received"] += 1
-            self.log_message(f"[HELLO] Recibido de {neighbor_id}")
-            
-            # Responder con ECHO si tiene secuencia
-            seq = payload.get("seq")
-            ts = payload.get("ts")
-            if seq and ts:
-                echo_msg = Messages.create_echo_message(
-                    from_addr=self.my_address,
-                    to_addr=from_addr,
-                    hops=4,
-                    algorithm=self.current_algorithm,
-                    seq=seq, original_ts=ts
-                    
-                )
-                self.send_to_neighbor(neighbor_id, echo_msg)
     
     def handle_echo_received(self, msg):
-        """Manejar ECHO recibido"""
-        from_addr = msg.get("from", "")
-        payload = msg.get("payload", {})
-        
-        original_ts = payload.get("ts")
-        if original_ts:
-            rtt = (time.time() - original_ts) * 1000  # RTT en ms
-            
-            # Encontrar neighbor_id
-            neighbor_id = None
-            for nid, addr in self.names.items():
-                if addr == from_addr:
-                    neighbor_id = nid
-                    break
-            
-            if neighbor_id and neighbor_id in self.neighbor_metrics:
-                self.neighbor_metrics[neighbor_id].rtt_samples.append(rtt)
-                # Mantener solo las últimas 10 muestras
-                if len(self.neighbor_metrics[neighbor_id].rtt_samples) > 10:
-                    self.neighbor_metrics[neighbor_id].rtt_samples.pop(0)
-            
-            self.log_message(f"[ECHO] RTT a {neighbor_id}: {rtt:.1f} ms")
-    
+        from_addr = msg.get("from")
+        neighbor_id = self.addr_to_id(from_addr)
+        if neighbor_id:
+            # Solo actualizar métricas de estado activo
+            metrics = self.neighbor_metrics[neighbor_id]
+            metrics.last_seen = time.time()
+            self.log_message(f"[ECHO] Vecino {neighbor_id} activo")
+
+    def addr_to_id(self, addr):
+        for nid, naddr in self.names.items():
+            if naddr == addr:
+                return nid
+        return None
+
     # =================== PROCESO DE FORWARDING ===================
     
     def forwarding_process(self):
@@ -438,8 +412,7 @@ class Nodo_Redis:
                             from_addr=self.my_address,
                             to_addr=neighbor_addr,
                             hops=4,
-                            algorithm=self.current_algorithm,
-                            seq=seq_counter
+                            algorithm=self.current_algorithm
                             
                         )
                         
@@ -523,12 +496,12 @@ class Nodo_Redis:
                 to_addr=dest_addr,
                 hops=10,
                 algorithm=self.current_algorithm,
-                data=payload
+                payload=payload
             )
 
 
             self.log_message(f"[Mensaje envado] {message}")
-            print(message)
+            
             
             
             # Procesar con algoritmo actual
