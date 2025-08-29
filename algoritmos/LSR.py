@@ -124,12 +124,13 @@ class LSR:
         self.sequence_number += 1
         current_time = time.time()
         
+        print("LSP", self.neighbor_costs.copy())
         # Usar el método específico de Messages
         lsp_msg = Messages.create_lsp_message(
             from_addr="",  # Se llenará en el nodo
             to_addr=to_addr,
-            neighbors_data=self.neighbor_costs.copy(),
-            sequence=self.sequence_number,
+            neighbors=self.neighbor_costs.copy(),
+            seq_num=self.sequence_number,
             algorithm="lsr",
             hops=10
         )
