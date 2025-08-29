@@ -7,6 +7,8 @@ from algoritmos.Flodding import Flooding  # Importar la clase que creaste
 from logs.Logs import Log
 from connection.Mensajes import Messages
 from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA
+from algoritmos.LSR import LSR
+from connection.Red import RedConfig
 
 class NeighborMetrics:
     def __init__(self):
@@ -14,15 +16,15 @@ class NeighborMetrics:
         self.last_hello = 0
         self.rtt_samples = []
 
-class NodoRedisFlooding:
-    def __init__(self, node_id):
+class Nodo_Redis:
+    def __init__(self, node_id, algoritmo, topology_file="data/topo.txt", names_file="data/id_nodos.txt"):
         self.node_id = node_id
         self.running = False
-        self.current_algorithm = "flooding"  # Preparado para otros algoritmos
+        self.current_algorithm = algoritmo  # Preparado para otros algoritmos
         
         # Configuración de red - se cargará desde Redis
-        self.topology = {}
-        self.names = {}
+        self.topology = RedConfig.load_topology(topology_file)
+        self.names = RedConfig.load_names(names_file)
         self.neighbor_ids = []
         self.my_address = None
         self.log = Log(f"./logs/{node_id}.txt")
@@ -302,6 +304,14 @@ class NodoRedisFlooding:
                         current_alg.process_message(self, message)
                     else:
                         self.log_message(f"[FORWARDING] No hay algoritmo para {self.current_algorithm}")
+
+                elif msg_type in INFO:  # ← AGREGAR ESTA LÍNEA
+                    # Mensajes de información (incluye LSP)
+                    current_alg = self.algorithms.get(self.current_algorithm)
+                    if current_alg and hasattr(current_alg, 'process_message'):
+                        current_alg.process_message(self, message)
+                    else:
+                        self.log_message(f"[FORWARDING] No hay algoritmo para {self.current_algorithm}")
                 else:
                     self.log_message(f"[FORWARDING] Tipo de mensaje desconocido: {msg_type}")
                 
@@ -351,9 +361,57 @@ class NodoRedisFlooding:
         }
     
     def _routing_cycle_lsr(self):
-        """Ciclo de routing para LSR - placeholder"""
-        self.log_message("[ROUTING-LSR] Ciclo LSR (no implementado)")
-        pass
+        lsr_alg = self.algorithms.get("lsr")
+        if not lsr_alg:
+            self.log_message("[ROUTING-LSR] Algoritmo LSR no disponible")
+            return
+        
+        try:
+            # Verificar si debe enviar LSP
+            if lsr_alg.should_send_lsp():
+                # Crear y enviar LSP a cada vecino
+                sent_count = 0
+                for neighbor_id in self.neighbor_ids:
+                    neighbor_addr = self.names.get(neighbor_id)
+                    if neighbor_addr:
+                        # Crear LSP específico para cada vecino
+                        lsp_msg = lsr_alg.create_lsp_message(neighbor_addr)
+                        lsp_msg["from"] = self.my_address  # Establecer dirección de origen
+                        
+                        if self.send_to_neighbor(neighbor_id, lsp_msg):
+                            sent_count += 1
+                
+                if sent_count > 0:
+                    self.log_message(f"[ROUTING-LSR] LSP enviado a {sent_count} vecinos")
+            
+            # Obtener información de ruteo actualizada
+            routing_info = lsr_alg.get_routing_table()
+            topology_info = lsr_alg.get_topology_info()
+            
+            # Actualizar tabla de ruteo compartida
+            self.routing_table = {
+                "algorithm": "lsr",
+                "routes": routing_info,
+                "topology": topology_info,
+                "known_nodes": topology_info.get("known_nodes", []),
+                "total_routes": len(routing_info)
+            }
+            
+            self.log_message(f"[ROUTING-LSR] Tabla actualizada: {len(routing_info)} rutas, {topology_info.get('total_nodes', 0)} nodos conocidos")
+            
+        except Exception as e:
+            self.log_message(f"[ROUTING-LSR] Error en ciclo: {e}")
+            
+    def get_lsr_stats(self):
+        """Obtener estadísticas específicas de LSR"""
+        lsr_alg = self.algorithms.get("lsr")
+        if lsr_alg:
+            return {
+                **lsr_alg.get_stats(),
+                "topology_info": lsr_alg.get_topology_info(),
+                "routing_table": lsr_alg.get_routing_table()
+            }
+        return {}
     
     def _routing_cycle_dijkstra(self):
         """Ciclo de routing para Dijkstra - placeholder"""
@@ -414,6 +472,15 @@ class NodoRedisFlooding:
                 def process_message(self, node, message):
                     node.log_message("[FLOODING] Procesando mensaje (implementación básica)")
             self.algorithms["flooding"] = BasicFlooding()
+        try:
+            self.algorithms["lsr"] = LSR(self.node_id, self.topology)
+            self.log_message("[INIT] LSR inicializado")
+        except ImportError:
+            self.log_message("[WARNING] No se pudo importar clase LSR")
+        except Exception as e:
+            self.log_message(f"[WARNING] Error inicializando LSR: {e}")
+        
+
         
         self.running = True
         
@@ -491,10 +558,9 @@ class NodoRedisFlooding:
         return True
     
     def get_stats(self):
-        """Obtener estadísticas del nodo"""
         current_time = time.time()
         active_neighbors = sum(1 for nid in self.neighbor_ids 
-                             if self.is_neighbor_active(nid, current_time))
+                            if self.is_neighbor_active(nid, current_time))
         
         stats = dict(self.stats)
         stats.update({
@@ -508,10 +574,14 @@ class NodoRedisFlooding:
         # Agregar stats del algoritmo actual
         current_alg = self.algorithms.get(self.current_algorithm)
         if current_alg and hasattr(current_alg, 'get_stats'):
-            stats.update(current_alg.get_stats())
+            alg_stats = current_alg.get_stats()
+            # Prefijo para evitar conflictos de nombres
+            for key, value in alg_stats.items():
+                stats[f"{self.current_algorithm}_{key}"] = value
         
         return stats
-    
+
+
     def interactive_mode(self):
         """Modo interactivo para testing"""
         print(f"\n=== NODO {self.node_id} - {self.current_algorithm.upper()} ===")
@@ -521,8 +591,13 @@ class NodoRedisFlooding:
         print("  neighbors                 - Ver estado de vecinos")
         print("  algorithm <alg>           - Cambiar algoritmo")
         print("  config                    - Ver configuración")
+        print("  lsr_info                  - Ver información LSR (solo si LSR activo)")
+        print("  lsr_topology              - Ver topología conocida por LSR")
+        print("  lsr_routes                - Ver tabla de ruteo LSR") 
+        print("  force_lsp                 - Forzar envío de LSP (solo LSR)")
         print("  quit                      - Salir")
         print("=" * 50)
+
         
         while self.running:
             try:
@@ -566,6 +641,54 @@ class NodoRedisFlooding:
                         print(f"Algoritmo cambiado a: {new_alg}")
                     else:
                         print(f"Error cambiando a algoritmo: {new_alg}")
+                
+
+                elif cmd[0] == "lsr_info":
+                    if self.current_algorithm == "lsr":
+                        lsr_stats = self.get_lsr_stats()
+                        print("Información LSR:")
+                        for key, value in lsr_stats.items():
+                            if isinstance(value, dict):
+                                print(f"  {key}:")
+                                for sub_key, sub_value in value.items():
+                                    print(f"    {sub_key}: {sub_value}")
+                            else:
+                                print(f"  {key}: {value}")
+                    else:
+                        print("LSR no está activo")
+                
+                elif cmd[0] == "lsr_topology":
+                    lsr_alg = self.algorithms.get("lsr")
+                    if lsr_alg:
+                        topology_info = lsr_alg.get_topology_info()
+                        print("Topología conocida por LSR:")
+                        for node, data in topology_info.get("link_state_db", {}).items():
+                            print(f"  {node}: {data}")
+                    else:
+                        print("LSR no disponible")
+                
+                elif cmd[0] == "lsr_routes":
+                    lsr_alg = self.algorithms.get("lsr")
+                    if lsr_alg:
+                        routes = lsr_alg.get_routing_table()
+                        print("Tabla de ruteo LSR:")
+                        for dest, route_info in routes.items():
+                            print(f"  {dest} -> next_hop: {route_info['next_hop']}, cost: {route_info['cost']}")
+                        if not routes:
+                            print("  (No hay rutas calculadas)")
+                    else:
+                        print("LSR no disponible")
+                
+                elif cmd[0] == "force_lsp":
+                    if self.current_algorithm == "lsr":
+                        lsr_alg = self.algorithms.get("lsr")
+                        if lsr_alg:
+                            lsr_alg.last_lsp_time = 0  # Forzar envío
+                            print("LSP forzado en próximo ciclo de routing")
+                        else:
+                            print("LSR no disponible")
+                    else:
+                        print("Comando solo disponible en modo LSR")
                 
                 elif cmd[0] == "quit":
                     self.stop()
