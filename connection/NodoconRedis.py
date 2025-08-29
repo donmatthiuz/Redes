@@ -525,6 +525,10 @@ class Nodo_Redis:
                 algorithm=self.current_algorithm,
                 data=payload
             )
+
+
+            self.log_message(f"[Mensaje envado] {message}")
+            print(message)
             
             
             # Procesar con algoritmo actual
