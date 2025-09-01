@@ -108,10 +108,10 @@ class RedisManager:
             result = self.redis_client.publish(channel, json_message)
             
             # result es el número de suscriptores que recibieron el mensaje
-            if result > 0:
-                print(f" Mensaje enviado a {channel} ({result} suscriptores)")
-            else:
-                print(f" Mensaje enviado a {channel} (sin suscriptores)")
+            # if result > 0:
+            #     # print(f" Mensaje enviado a {channel} ({result} suscriptores)")
+            # else:
+            #     print(f" Mensaje enviado a {channel} (sin suscriptores)")
             
             return True
             
