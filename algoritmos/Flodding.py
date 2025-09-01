@@ -16,51 +16,89 @@ class Flooding:
     
     def _get_header(self, msg, key, default=None):
         """Obtener valor de un header específico"""
-        for header in msg.get("headers", []):
-            if key in header:
-                return header[key]
+        headers = msg.get("headers", {})
+        if isinstance(headers, list):
+            # Convertir lista de headers a diccionario
+            headers_dict = {}
+            for header in headers:
+                if isinstance(header, dict):
+                    headers_dict.update(header)
+                elif isinstance(header, str):
+                    headers_dict[header] = True
+            return headers_dict.get(key, default)
+        elif isinstance(headers, dict):
+            return headers.get(key, default)
         return default
     
     def _set_header(self, msg, key, value):
         """Establecer valor de un header"""
-        headers = msg.get("headers", [])
-        # Remover header existente si existe
-        headers = [h for h in headers if key not in h]
-        # Agregar nuevo header
-        headers.append({key: value})
+        headers = msg.get("headers", {})
+        
+        # Asegurar que headers sea un diccionario
+        if isinstance(headers, list):
+            headers_dict = {}
+            for header in headers:
+                if isinstance(header, dict):
+                    headers_dict.update(header)
+                elif isinstance(header, str):
+                    headers_dict[header] = True
+            headers = headers_dict
+        elif not isinstance(headers, dict):
+            headers = {}
+        
+        headers[key] = value
         msg["headers"] = headers
     
-    def _generate_message_id(self, msg):
-        """Generar ID único para el mensaje"""
-        mid = self._get_header(msg, "mid")
-        if mid:
-            return mid
+    def _remove_header(self, msg, key):
+        """Remover un header específico"""
+        headers = msg.get("headers", {})
         
-        # Generar MID basado en origen y timestamp
+        # Asegurar que headers sea un diccionario
+        if isinstance(headers, list):
+            headers_dict = {}
+            for header in headers:
+                if isinstance(header, dict):
+                    headers_dict.update(header)
+                elif isinstance(header, str):
+                    headers_dict[header] = True
+            headers = headers_dict
+        elif not isinstance(headers, dict):
+            headers = {}
+        
+        if key in headers:
+            del headers[key]
+        
+        msg["headers"] = headers
+    
+    def _generate_message_signature(self, msg):
+        """Generar firma única para el mensaje basada en contenido"""
         src = msg.get("from", "unknown")
-        payload = msg.get("payload", {})
+        dest = msg.get("to", "unknown")
+        payload = str(msg.get("payload", ""))
+        msg_type = msg.get("type", "")
         
-        # Buscar secuencia en payload
+        # Buscar secuencia en payload si es un diccionario
         seq = None
-        if isinstance(payload, dict):
-            seq = payload.get("seq") or payload.get("id")
+        if isinstance(msg.get("payload"), dict):
+            seq = msg["payload"].get("seq") or msg["payload"].get("id")
         
         if seq is None:
-            seq = int(time.time() * 1_000_000)  # Microsegundos como seq
+            # Usar timestamp como secuencia
+            seq = int(time.time() * 1_000_000)
         
-        mid = f"{src}:{seq}"
-        self._set_header(msg, "mid", mid)
-        return mid
+        # Crear firma única
+        signature = f"{src}:{dest}:{msg_type}:{seq}:{hash(payload)}"
+        return signature
     
     def is_duplicate(self, msg):
         """Verificar si el mensaje ya fue procesado"""
-        mid = self._generate_message_id(msg)
+        signature = self._generate_message_signature(msg)
         
-        if mid in self.seen_messages:
+        if signature in self.seen_messages:
             self.stats["duplicates_dropped"] += 1
             return True
         
-        self.seen_messages.add(mid)
+        self.seen_messages.add(signature)
         return False
     
     def should_forward(self, node, msg):
@@ -102,8 +140,11 @@ class Flooding:
             if not node.is_neighbor_active(neighbor_id, current_time):
                 continue
             
+            # Limpiar mensaje antes de enviar
+            clean_msg = self.prepare_message_for_send(forward_msg)
+            
             # Enviar mensaje
-            if node.send_to_neighbor(neighbor_id, forward_msg):
+            if node.send_to_neighbor(neighbor_id, clean_msg):
                 forwarded_count += 1
                 node.log_message(f"[FLOODING] Reenviado a {neighbor_id}")
         
@@ -116,7 +157,8 @@ class Flooding:
         
         # Verificar duplicados
         if self.is_duplicate(msg):
-            node.log_message(f"[FLOODING] Mensaje duplicado descartado: {self._get_header(msg, 'mid')}")
+            signature = self._generate_message_signature(msg)
+            node.log_message(f"[FLOODING] Mensaje duplicado descartado: {signature}")
             return
         
         # Verificar si es para este nodo
@@ -128,8 +170,8 @@ class Flooding:
         # Reenviar mensaje
         forwarded = self.forward_message(node, msg)
         if forwarded > 0:
-            mid = self._get_header(msg, "mid")
-            node.log_message(f"[FLOODING] Mensaje {mid} reenviado a {forwarded} vecinos")
+            signature = self._generate_message_signature(msg)
+            node.log_message(f"[FLOODING] Mensaje {signature} reenviado a {forwarded} vecinos")
     
     def _deliver_message(self, node, msg):
         """Entregar mensaje al nodo local"""
@@ -137,21 +179,23 @@ class Flooding:
         from_addr = msg.get("from", "")
         payload = msg.get("payload", "")
         
+        # Limpiar headers internos antes de entregar
+        clean_msg = self.prepare_message_for_send(msg)
+        
         self.stats["messages_delivered"] += 1
         
         if msg_type in MENSAJE:
-            node.log_message(f"[FLOODING] MENSAJE RECIBIDO de {from_addr}: {msg}")
+            node.log_message(f"[FLOODING] MENSAJE RECIBIDO de {from_addr}: {clean_msg}")
             print(f"[{node.node_id}] >>> MENSAJE: {payload}")
         elif msg_type in HOLA:
-            node.handle_hello_received(msg)
+            node.handle_hello_received(clean_msg)
         elif msg_type in ECHO:
-            node.handle_echo_received(msg)
+            node.handle_echo_received(clean_msg)
         elif msg_type in INFO:
             node.log_message(f"[FLOODING] INFO RECIBIDO de {from_addr}: {payload}")
     
     def create_data_message(self, from_addr, to_addr, data, hops=10):
         """Crear mensaje de datos para envío"""
-
         mensaje = Messages.create_data_message(
             from_addr=from_addr,
             to_addr=to_addr,
@@ -159,9 +203,45 @@ class Flooding:
             algorithm="flooding",
             hops=hops
         )
-        print(mensaje)
-        return mensaje
         
+        # Asegurar que headers esté en formato diccionario
+        if isinstance(mensaje.get("headers"), list):
+            headers_dict = {}
+            for header in mensaje["headers"]:
+                if isinstance(header, dict):
+                    headers_dict.update(header)
+                elif isinstance(header, str):
+                    headers_dict[header] = True
+            mensaje["headers"] = headers_dict
+        
+        # Preparar mensaje limpio para envío
+        clean_mensaje = self.prepare_message_for_send(mensaje)
+        print(clean_mensaje)
+        return clean_mensaje
+    
+    def prepare_message_for_send(self, msg):
+        """Preparar mensaje para envío (limpiar headers internos)"""
+        clean_msg = dict(msg)
+        
+        # Mantener solo headers públicos
+        headers = clean_msg.get("headers", {})
+        if isinstance(headers, dict):
+            # Crear nueva estructura de headers sin headers internos
+            clean_headers = {k: v for k, v in headers.items() if k not in ["prev"]}
+            clean_msg["headers"] = clean_headers
+        elif isinstance(headers, list):
+            # Convertir y limpiar
+            headers_dict = {}
+            for header in headers:
+                if isinstance(header, dict):
+                    headers_dict.update(header)
+                elif isinstance(header, str):
+                    headers_dict[header] = True
+            # Remover headers internos
+            clean_headers = {k: v for k, v in headers_dict.items() if k not in ["prev"]}
+            clean_msg["headers"] = clean_headers
+        
+        return clean_msg
     
     def get_stats(self):
         """Obtener estadísticas del algoritmo"""
