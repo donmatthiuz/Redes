@@ -14,6 +14,7 @@ class NeighborMetrics:
     def __init__(self):
         self.last_seen = 0
         self.last_hello = 0
+        self.last_echo_sent = 0 
         self.rtt_samples = []
 
 class Nodo_Redis:
@@ -212,7 +213,10 @@ class Nodo_Redis:
     
     def handle_hello_received(self, msg):
         from_addr = msg.get("from")    
-        
+
+        current_alg = self.algorithms.get(self.current_algorithm)
+        if current_alg and hasattr(current_alg, 'process_message'):
+            current_alg.process_message(self, msg)
         neighbor_id = self.addr_to_id(from_addr)
         if neighbor_id:
             metrics = self.neighbor_metrics[neighbor_id]
@@ -225,7 +229,152 @@ class Nodo_Redis:
                 algorithm=self.current_algorithm,hops=0)
 
             self.send_to_neighbor(neighbor_id, echo_msg)
+    
+
+    def hello_process(self):
+        """Proceso de envío de mensajes HELLO optimizado"""
+        self.log_message("[HELLO] Proceso iniciado")
+        seq_counter = 0
+        
+        # Configuración de intervalos
+        HELLO_INTERVAL = 5.0        # Intervalo base de HELLO
+        HELLO_TIMEOUT = 15.0        # Tiempo sin respuesta para considerar vecino inactivo
+        MAX_HELLO_INTERVAL = 30.0   # Intervalo máximo para vecinos inactivos
+        
+        while self.running:
+            try:
+                seq_counter += 1
+                current_time = time.time()
+                
+                # Enviar HELLO solo cuando sea necesario
+                for neighbor_id in self.neighbor_ids:
+                    neighbor_addr = self.names.get(neighbor_id)
+                    if not neighbor_addr:
+                        continue
+                    
+                    metrics = self.neighbor_metrics.get(neighbor_id)
+                    if not metrics:
+                        continue
+                    
+                    # Decidir si enviar HELLO basado en actividad del vecino
+                    should_send_hello = self._should_send_hello(neighbor_id, current_time)
+                    
+                    if should_send_hello:
+                        hello_msg = Messages.create_hello_message(
+                            from_addr=self.my_address,
+                            to_addr=neighbor_addr,
+                            hops=4,
+                            algorithm=self.current_algorithm
+                        )
+                        
+                        if self.send_to_neighbor(neighbor_id, hello_msg):
+                            self.stats["hello_sent"] += 1
+                            metrics.last_hello = current_time
+                            self.log_message(f"[HELLO] Enviado a {neighbor_id} (último contacto hace {current_time - metrics.last_seen:.1f}s)")
+                        else:
+                            self.log_message(f"[HELLO] Error enviando a {neighbor_id}")
+                    else:
+                        # Log de por qué no se envió
+                        time_since_last = current_time - metrics.last_seen if metrics.last_seen > 0 else float('inf')
+                        time_since_hello = current_time - metrics.last_hello if metrics.last_hello > 0 else float('inf')
+                        self.log_message(f"[HELLO] Omitiendo {neighbor_id} - último contacto: {time_since_last:.1f}s, último hello: {time_since_hello:.1f}s")
+                
+                time.sleep(HELLO_INTERVAL)
+                    
+            except Exception as e:
+                self.log_message(f"[HELLO] ERROR: {e}")
+                time.sleep(2.0)
+
+    def _should_send_hello(self, neighbor_id, current_time):
+        """Determinar si se debe enviar HELLO a un vecino específico"""
+        
+        # Configuración de intervalos
+        HELLO_INTERVAL = 5.0        # Intervalo normal
+        HELLO_TIMEOUT = 15.0        # Timeout para considerar inactivo
+        HELLO_RETRY_INTERVAL = 3.0  # Intervalo para vecinos inactivos
+        MAX_HELLO_INTERVAL = 30.0   # Intervalo máximo
+        
+        metrics = self.neighbor_metrics.get(neighbor_id)
+        if not metrics:
+            return True  # Sin métricas, enviar
+        
+        # Caso 1: Primer HELLO (nunca se ha enviado)
+        if metrics.last_hello == 0:
+            self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Primer HELLO")
+            return True
+        
+        # Tiempo transcurrido desde último HELLO enviado
+        time_since_hello = current_time - metrics.last_hello
+        
+        # Caso 2: Vecino activo (responde normalmente)
+        if metrics.last_seen > 0:
+            time_since_contact = current_time - metrics.last_seen
             
+            if time_since_contact <= HELLO_TIMEOUT:
+                # Vecino activo - usar intervalo normal
+                if time_since_hello >= HELLO_INTERVAL:
+                    self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Vecino activo, intervalo normal ({time_since_hello:.1f}s >= {HELLO_INTERVAL}s)")
+                    return True
+                else:
+                    self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Vecino activo, esperando intervalo ({time_since_hello:.1f}s < {HELLO_INTERVAL}s)")
+                    return False
+            else:
+                # Vecino inactivo - usar intervalo de reintentos más frecuente
+                if time_since_hello >= HELLO_RETRY_INTERVAL:
+                    self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Vecino inactivo, reintentando ({time_since_hello:.1f}s >= {HELLO_RETRY_INTERVAL}s)")
+                    return True
+                else:
+                    self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Vecino inactivo, esperando reintento ({time_since_hello:.1f}s < {HELLO_RETRY_INTERVAL}s)")
+                    return False
+        
+        # Caso 3: Nunca se ha visto respuesta del vecino
+        else:
+            # Limitar la frecuencia para vecinos que nunca responden
+            if time_since_hello >= MAX_HELLO_INTERVAL:
+                self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Sin respuesta, reintento máximo ({time_since_hello:.1f}s >= {MAX_HELLO_INTERVAL}s)")
+                return True
+            elif time_since_hello >= HELLO_RETRY_INTERVAL:
+                self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Sin respuesta, reintento normal ({time_since_hello:.1f}s >= {HELLO_RETRY_INTERVAL}s)")
+                return True
+            else:
+                self.log_message(f"[HELLO_LOGIC] {neighbor_id}: Sin respuesta, esperando ({time_since_hello:.1f}s < {HELLO_RETRY_INTERVAL}s)")
+                return False
+
+    def get_neighbor_status(self):
+        """Obtener estado detallado de todos los vecinos"""
+        current_time = time.time()
+        status = {}
+        
+        for neighbor_id in self.neighbor_ids:
+            metrics = self.neighbor_metrics.get(neighbor_id)
+            if metrics:
+                time_since_contact = current_time - metrics.last_seen if metrics.last_seen > 0 else float('inf')
+                time_since_hello = current_time - metrics.last_hello if metrics.last_hello > 0 else float('inf')
+                
+                status[neighbor_id] = {
+                    "address": self.names.get(neighbor_id, "N/A"),
+                    "active": self.is_neighbor_active(neighbor_id, current_time),
+                    "last_seen": metrics.last_seen,
+                    "last_hello": metrics.last_hello,
+                    "time_since_contact": time_since_contact,
+                    "time_since_hello": time_since_hello,
+                    "should_send_hello": self._should_send_hello(neighbor_id, current_time)
+                }
+        
+        return status
+    
+    
+    def update_neighbor_activity(self, from_addr):
+        neighbor_id = self.addr_to_id(from_addr)
+        if neighbor_id and neighbor_id in self.neighbor_metrics:
+            current_time = time.time()
+            metrics = self.neighbor_metrics[neighbor_id]
+            metrics.last_seen = current_time
+            self.log_message(f"[NEIGHBOR] Actividad actualizada para {neighbor_id} ({from_addr})")
+            return True
+        else:
+            self.log_message(f"[NEIGHBOR] Dirección desconocida: {from_addr}")
+            return False
     
     def handle_echo_received(self, msg):
         from_addr = msg.get("from")

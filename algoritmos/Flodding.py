@@ -151,9 +151,27 @@ class Flooding:
         self.stats["messages_flooded"] += forwarded_count
         return forwarded_count
     
+    def should_flood_message_type(self, msg_type):
+        """Determinar si este tipo de mensaje debe usar flooding"""
+        # Solo MENSAJE e INFO usan flooding
+        # HELLO y ECHO son comunicación directa entre vecinos
+        return msg_type in MENSAJE or msg_type in INFO
+    
     def process_message(self, node, msg):
         """Procesar mensaje recibido con flooding"""
         msg_type = msg.get("type", "")
+        # HELLO y ECHO no usan flooding - procesamiento directo
+        if msg_type in HOLA:
+            node.update_neighbor_activity(msg.get("from", ""))
+            node.log_message(f"[FLOODING] HELLO directo de {msg.get('from', '')}")
+            return
+        elif msg_type in ECHO:
+            node.handle_echo_received(msg)
+            return
+        
+        # Solo procesar con flooding MENSAJE e INFO
+        if not self.should_flood_message_type(msg_type):
+            return
         
         # Verificar duplicados
         if self.is_duplicate(msg):
@@ -188,7 +206,9 @@ class Flooding:
             node.log_message(f"[FLOODING] MENSAJE RECIBIDO de {from_addr}: {clean_msg}")
             print(f"[{node.node_id}] >>> MENSAJE: {payload}")
         elif msg_type in HOLA:
-            node.handle_hello_received(clean_msg)
+            # HELLO no debe ser procesado en flooding, solo actualizar vecino
+            node.update_neighbor_activity(from_addr)
+            node.log_message(f"[FLOODING] HELLO recibido de {from_addr} - vecino actualizado")
         elif msg_type in ECHO:
             node.handle_echo_received(clean_msg)
         elif msg_type in INFO:
