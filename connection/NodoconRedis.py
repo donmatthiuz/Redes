@@ -595,7 +595,7 @@ class Nodo_Redis:
                     node.log_message("[FLOODING] Procesando mensaje (implementación básica)")
             self.algorithms["flooding"] = BasicFlooding()
         try:
-            self.algorithms["lsr"] = LSR(self.node_id, self.topology)
+            self.algorithms["lsr"] = LSR(self, self.node_id, self.topology, self.names)
             self.log_message("[INIT] LSR inicializado")
         except ImportError:
             self.log_message("[WARNING] No se pudo importar clase LSR")
