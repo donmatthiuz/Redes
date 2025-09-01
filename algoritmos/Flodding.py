@@ -71,24 +71,16 @@ class Flooding:
         msg["headers"] = headers
     
     def _generate_message_signature(self, msg):
-        """Generar firma única para el mensaje basada en contenido"""
         src = msg.get("from", "unknown")
         dest = msg.get("to", "unknown")
-        payload = str(msg.get("payload", ""))
+        saltos = msg.get("hops", "unknown")
         msg_type = msg.get("type", "")
-        
-        # Buscar secuencia en payload si es un diccionario
-        seq = None
-        if isinstance(msg.get("payload"), dict):
-            seq = msg["payload"].get("seq") or msg["payload"].get("id")
-        
-        if seq is None:
-            # Usar timestamp como secuencia
-            seq = int(time.time() * 1_000_000)
-        
-        # Crear firma única
-        signature = f"{src}:{dest}:{msg_type}:{seq}:{hash(payload)}"
+        payload = msg.get("payload", "")
+
+        # Crear hash único usando string concatenado
+        signature = hash(f"{src}:{dest}:{msg_type}:{saltos}:{json.dumps(payload, sort_keys=True)}")
         return signature
+
     
     def is_duplicate(self, msg):
         """Verificar si el mensaje ya fue procesado"""
@@ -115,42 +107,48 @@ class Flooding:
         
         return True
     
+    
     def forward_message(self, node, msg):
-        """Reenviar mensaje a todos los vecinos activos"""
         if not self.should_forward(node, msg):
             return 0
-        
-        # Preparar mensaje para reenvío
+
+        # Crear una copia del mensaje para enviar
         forward_msg = dict(msg)
+        
+        # Reducir hops
         forward_msg["hops"] = msg.get("hops", 0) - 1
+        
+        # Marcar este nodo como prev hop para el siguiente salto
         self._set_header(forward_msg, "prev", node.node_id)
-        
-        # Obtener vecino anterior para no reenviar
+
+        # Nodo del que recibimos el mensaje
         prev_hop = self._get_header(msg, "prev")
-        
+
         forwarded_count = 0
         current_time = time.time()
-        
+
         for neighbor_id in node.neighbor_ids:
             # No reenviar al que nos envió el mensaje
             if neighbor_id == prev_hop:
                 continue
             
-            # Verificar si el vecino está activo
+            # Solo reenviar a vecinos activos
             if not node.is_neighbor_active(neighbor_id, current_time):
                 continue
-            
-            # Limpiar mensaje antes de enviar
+
+            # Preparar mensaje limpio
             clean_msg = self.prepare_message_for_send(forward_msg)
             
             # Enviar mensaje
             if node.send_to_neighbor(neighbor_id, clean_msg):
                 forwarded_count += 1
                 node.log_message(f"[FLOODING] Reenviado a {neighbor_id}")
-        
+
+        # Actualizar estadísticas
         self.stats["messages_flooded"] += forwarded_count
         return forwarded_count
-    
+
+
     def should_flood_message_type(self, msg_type):
         """Determinar si este tipo de mensaje debe usar flooding"""
         # Solo MENSAJE e INFO usan flooding

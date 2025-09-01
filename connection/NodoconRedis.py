@@ -643,7 +643,7 @@ class Nodo_Redis:
             message = Messages.create_data_message(
                 from_addr=self.my_address,
                 to_addr=dest_addr,
-                hops=10,
+                hops=6,
                 algorithm=self.current_algorithm,
                 payload=payload
             )
