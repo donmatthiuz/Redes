@@ -4,7 +4,7 @@ from typing import Dict, List, Set, Tuple, Optional
 from algoritmos.DJstra import SolveDjstra
 from connection.Red import Red
 from connection.Mensajes import Messages
-from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA
+from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA, BROADCAST
 
 
 class LSR:
@@ -152,7 +152,9 @@ class LSR:
             'seq_num': self.sequence_number,
             'neighbors': self.neighbor_costs.copy()
         }
-        
+        self.nodo.log_message(
+            f"[LSR-{self.node_id}] LSP creado: mensaje={lsp_msg}"
+        )
         # Actualizar mi entrada en la base de datos
         self.link_state_db[self.my_address] = {
             "neighbors": self.neighbor_costs.copy(),
@@ -353,7 +355,7 @@ class LSR:
                 self._deliver_message(node, msg)
         elif msg_type in MENSAJE:
             to_addr = msg.get("to", "")
-            if to_addr == self.my_address:
+            if to_addr == self.my_address or to_addr in BROADCAST:
                 self._deliver_message(node, msg)
             else:
                 # Intentar ruteo usando LSR
@@ -361,7 +363,7 @@ class LSR:
         else:
             # Otros mensajes se entregan normalmente
             to_addr = msg.get("to", "")
-            if to_addr == self.my_address:
+            if to_addr == self.my_address or to_addr in BROADCAST:
                 self._deliver_message(node, msg)
     
     def _route_message(self, node, msg):
@@ -412,7 +414,7 @@ class LSR:
     def should_send_lsp(self) -> bool:
         """Determinar si es tiempo de enviar LSP"""
         current_time = time.time()
-        return (current_time - self.last_lsp_time) > 30
+        return (current_time - self.last_lsp_time) > 5
     
     def get_next_hop(self, destination: str) -> Optional[str]:
         """Obtener siguiente salto para un destino (dirección)"""

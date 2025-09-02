@@ -2,7 +2,7 @@ INFO = (
     "info", "INFO", "Info", 
     "TABLE", "table", "Table", 
     "infoo", "infor", "tabl", "tables",
-    "information", "INFORMATION", "Information"
+    "information", "INFORMATION", "Information", "lsp", "LSP"
 )
 
 MENSAJE = (
@@ -28,4 +28,23 @@ ECHO = (
     "eco", "ECO", "Eco",
     "repeat", "REPEAT", "Repeat",
     "ecco", "echoo", "eho", "echo_test"
+)
+
+BROADCAST = (
+    "*",
+    "broadcast",
+    "BROADCAST",
+    "Broadcast",
+    "todos",
+    "TODOS",
+    "Todos",
+    "all",
+    "ALL",
+    "All",
+    "everyone",
+    "Everyone",
+    "EVERYONE",
+    "any",
+    "ANY",
+    "Any"
 )
