@@ -1,6 +1,14 @@
 #!/bin/bash
+
 # Script de configuración para el sistema MCP de clases
 echo "🚀 Configurando sistema MCP para gestión de clases..."
+
+# Verificar que Node.js está instalado
+if ! command -v node &> /dev/null; then
+    echo "❌ Node.js no está instalado. Por favor instálalo primero."
+    echo "   Puedes instalarlo desde: https://nodejs.org/"
+    exit 1
+fi
 
 # Verificar que Python está instalado
 if ! command -v python3 &> /dev/null; then
@@ -8,44 +16,49 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Verificar que uv está instalado (recomendado para MCP servers)
+# Verificar que uv está instalado (recomendado para MCP)
 if ! command -v uv &> /dev/null; then
-    echo "📦 Instalando uv (gestor de paquetes Python rápido)..."
+    echo "📦 Instalando uv (Python package manager)..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.cargo/bin:$PATH"
     source $HOME/.cargo/env
-    echo "✅ uv instalado correctamente"
 fi
 
 # Crear directorio del proyecto
+echo "📁 Creando estructura del proyecto..."
 mkdir -p mcp-class-system
 cd mcp-class-system
 
+# Instalar servidores MCP
+echo "📦 Instalando servidores MCP..."
+
+# Servidor Filesystem (oficial)
+npm install -g @modelcontextprotocol/server-filesystem
+
+# Servidor Git (no oficial - usando pip)
+echo "🔧 Instalando mcp-server-git..."
+pip install mcp-server-git
+
 # Crear entorno virtual de Python
 echo "🐍 Configurando entorno Python..."
-uv venv venv
+python3 -m venv venv
 source venv/bin/activate
 
-# Crear requirements.txt si no existe
+# Crear requirements.txt
 cat > requirements.txt << 'EOF'
-anthropic>=0.18.0
-gitpython>=3.1.40
-python-dotenv>=1.0.0
-requests>=2.31.0
-markdown>=3.5.1
+anthropic>=0.34.0
+mcp>=1.0.0
+mcp-server-git>=0.1.0
+pathlib
+asyncio-extras
 EOF
 
 # Instalar dependencias de Python
-echo "📦 Instalando dependencias Python..."
-uv pip install -r requirements.txt
-
-# Instalar mcp-server-git usando uv
-echo "🔧 Instalando mcp-server-git..."
-uv tool install mcp-server-git
+pip install -r requirements.txt
 
 # Crear estructura de directorios
 mkdir -p clases
 mkdir -p .github/workflows
-mkdir -p config
 
 # Configurar Git si no existe
 if [ ! -d ".git" ]; then
@@ -53,41 +66,31 @@ if [ ! -d ".git" ]; then
     git init
     git branch -M main
     
-    echo "📝 Configura tu repositorio remoto:"
+    echo "📝 Configura tu repositorio remoto ejecutando:"
     echo "git remote add origin https://github.com/TU_USUARIO/TU_REPOSITORIO.git"
 fi
 
-# Crear configuración MCP para Claude Desktop
-cat > config/claude_desktop_config.json << 'EOF'
+# Crear archivo de configuración MCP para Claude Desktop
+echo "⚙️ Creando configuración para Claude Desktop..."
+mkdir -p ~/.config/claude/
+
+cat > claude_desktop_config.json << 'EOF'
 {
   "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "./clases"]
+    },
     "git": {
       "command": "uvx",
       "args": ["mcp-server-git"]
-    },
-    "filesystem": {
-      "command": "uvx", 
-      "args": ["mcp-server-filesystem", "--allowed-dir", "."]
     }
   }
 }
 EOF
 
-# Crear configuración MCP para VS Code
-cat > .vscode/mcp.json << 'EOF'
-{
-  "servers": {
-    "git": {
-      "command": "uvx",
-      "args": ["mcp-server-git"]
-    },
-    "filesystem": {
-      "command": "uvx",
-      "args": ["mcp-server-filesystem", "--allowed-dir", "."]
-    }
-  }
-}
-EOF
+echo "📋 Para configurar Claude Desktop, copia el contenido de claude_desktop_config.json"
+echo "   al archivo de configuración de Claude en tu sistema."
 
 # Crear archivo de configuración GitHub Actions
 cat > .github/workflows/deploy.yml << 'EOF'
@@ -96,26 +99,35 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    
     steps:
-    - uses: actions/checkout@v4
-        
+    - name: Checkout
+      uses: actions/checkout@v4
+      
     - name: Setup Pages
       uses: actions/configure-pages@v4
-          
+      
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
         path: '.'
-            
+        
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v4
@@ -124,143 +136,187 @@ EOF
 # Crear archivo .env de ejemplo
 cat > .env.example << 'EOF'
 # Configuración del sistema MCP
-ANTHROPIC_API_KEY=tu_api_key_aqui
+ANTHROPIC_API_KEY=tu_api_key_de_anthropic_aqui
 
 # Configuración Git (opcional)
 GIT_USER_NAME=Tu Nombre
 GIT_USER_EMAIL=tu@email.com
-
-# Configuración del proyecto
-PROJECT_DIR=./clases
-REPO_PATH=.
 EOF
 
 # Crear gitignore
 cat > .gitignore << 'EOF'
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 venv/
+env/
+ENV/
+
+# Configuración sensible
 .env
 
 # Node
 node_modules/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Sistema
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # Logs
 *.log
+logs/
 
-# MCP
-.mcp/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporal
+.tmp/
+temp/
 EOF
 
-# Crear script de prueba MCP
-cat > test_mcp.py << 'EOF'
-#!/usr/bin/env python3
-"""
-Script de prueba para verificar la instalación MCP
-"""
-import os
-import subprocess
-import sys
-from pathlib import Path
+# Crear README.md
+cat > README.md << 'EOF'
+# 📚 Sistema MCP para Gestión de Clases
 
-def test_uv_installation():
-    """Verifica que uv esté instalado"""
-    try:
-        result = subprocess.run(['uv', '--version'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("✅ uv está instalado:", result.stdout.strip())
-            return True
-        else:
-            print("❌ Error con uv:", result.stderr)
-            return False
-    except FileNotFoundError:
-        print("❌ uv no está instalado")
-        return False
+Sistema integrado que combina Claude AI con servidores MCP (Model Context Protocol) para gestionar horarios, notas de clase y publicación automática en GitHub Pages.
 
-def test_mcp_git_server():
-    """Verifica que mcp-server-git esté disponible"""
-    try:
-        result = subprocess.run(['uvx', 'mcp-server-git', '--help'], 
-                              capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            print("✅ mcp-server-git está disponible")
-            return True
-        else:
-            print("❌ Error con mcp-server-git:", result.stderr)
-            return False
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("❌ mcp-server-git no está disponible")
-        return False
+## 🚀 Características
 
-def test_git_repo():
-    """Verifica que estemos en un repositorio Git"""
-    if Path('.git').exists():
-        print("✅ Repositorio Git inicializado")
-        return True
-    else:
-        print("❌ No es un repositorio Git")
-        return False
+- ✅ Gestión automática de horarios de clase
+- 📝 Creación y organización de notas
+- 🔄 Integración con Git para versionado
+- 🌐 Publicación automática en GitHub Pages
+- 🤖 Interfaz conversacional con Claude AI
 
-def main():
-    print("🧪 Probando configuración MCP...\n")
-    
-    tests = [
-        test_uv_installation,
-        test_mcp_git_server,
-        test_git_repo
-    ]
-    
-    results = []
-    for test in tests:
-        results.append(test())
-        print()
-    
-    if all(results):
-        print("🎉 ¡Todas las pruebas pasaron! Sistema MCP configurado correctamente.")
-        return 0
-    else:
-        print("⚠️  Algunas pruebas fallaron. Revisa la configuración.")
-        return 1
+## 📦 Instalación
 
-if __name__ == "__main__":
-    sys.exit(main())
+1. Clona este repositorio
+2. Ejecuta el script de configuración:
+   ```bash
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+
+## ⚙️ Configuración
+
+1. **API Key de Anthropic:**
+   ```bash
+   cp .env.example .env
+   # Edita .env y agrega tu API key
+   ```
+
+2. **Repositorio GitHub:**
+   ```bash
+   git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
+   ```
+
+3. **GitHub Pages:**
+   - Ve a Settings > Pages en tu repositorio
+   - Selecciona "GitHub Actions" como source
+
+## 🎯 Uso
+
+```bash
+# Activar entorno virtual
+source venv/bin/activate
+
+# Configurar API key
+export ANTHROPIC_API_KEY=tu_api_key
+
+# Ejecutar el sistema
+python mcp_class_bot.py
+```
+
+## 📋 Comandos Disponibles
+
+- `clases` - Ver clases del día
+- `notas [materia]` - Crear notas para una materia
+- `publicar` - Subir cambios a GitHub
+- `deploy` - Desplegar en GitHub Pages
+
+## 🛠️ Tecnologías
+
+- Python 3.8+
+- MCP (Model Context Protocol)
+- Claude AI API
+- GitHub Actions
+- Git
+
+## 📄 Licencia
+
+MIT License
 EOF
 
-chmod +x test_mcp.py
+# Crear un horario de ejemplo
+cat > horario_clases.json << 'EOF'
+{
+  "lunes": ["Matemáticas", "Historia", "Ciencias"],
+  "martes": ["Literatura", "Química", "Educación Física"],
+  "miércoles": ["Inglés", "Biología", "Arte"],
+  "jueves": ["Física", "Geografía", "Música"],
+  "viernes": ["Filosofía", "Informática", "Psicología"],
+  "sábado": [],
+  "domingo": []
+}
+EOF
 
-echo "✅ Sistema configurado correctamente!"
+echo ""
+echo "✅ ¡Sistema configurado correctamente!"
 echo ""
 echo "📋 Pasos siguientes:"
-echo "1. Copia tu API key de Anthropic en .env:"
+echo ""
+echo "1. 🔑 Configura tu API key de Anthropic:"
 echo "   cp .env.example .env"
-echo "   # Edita .env con tu API key"
+echo "   # Edita .env con tu API key real"
 echo ""
-echo "2. Ejecuta las pruebas del sistema:"
-echo "   python3 test_mcp.py"
-echo ""
-echo "3. Configura Claude Desktop (opcional):"
-echo "   # Copia config/claude_desktop_config.json a tu directorio de configuración de Claude"
-echo ""
-echo "4. Para VS Code, asegúrate de tener la extensión MCP instalada"
-echo ""
-echo "5. Configura tu repositorio GitHub:"
+echo "2. 🔗 Configura tu repositorio GitHub:"
 echo "   git remote add origin https://github.com/TU_USUARIO/TU_REPO.git"
 echo ""
-echo "6. Activa GitHub Pages en tu repositorio:"
-echo "   Settings > Pages > Source: GitHub Actions"
+echo "3. 🌐 Activa GitHub Pages:"
+echo "   - Ve a tu repositorio en GitHub"
+echo "   - Settings > Pages > Source: GitHub Actions"
 echo ""
-echo "🔧 Comandos útiles:"
-echo "   # Probar mcp-server-git directamente:"
-echo "   uvx mcp-server-git"
+echo "4. ⚙️ Configura Claude Desktop (opcional):"
+echo "   - Copia el contenido de claude_desktop_config.json"
+echo "   - Pégalo en tu configuración de Claude Desktop"
 echo ""
-echo "   # Debugging con MCP inspector:"
-echo "   npx @modelcontextprotocol/inspector uvx mcp-server-git"
+echo "5. 🚀 Ejecuta el sistema:"
+echo "   source venv/bin/activate"
+echo "   export ANTHROPIC_API_KEY=tu_api_key"
+echo "   python mcp_class_bot.py"
+echo ""
+echo "📖 Consulta README.md para más detalles"
 echo ""
 echo "🎉 ¡Listo para usar!"
