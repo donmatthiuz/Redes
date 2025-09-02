@@ -1,7 +1,7 @@
 import time
 import json
 from connection.Mensajes import Messages
-from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA
+from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA, BROADCAST
 
 class Flooding:
     """Algoritmo de Flooding para el protocolo de red"""
@@ -179,7 +179,7 @@ class Flooding:
         
         # Verificar si es para este nodo
         to_addr = msg.get("to", "")
-        if to_addr == node.node_id or to_addr == node.my_address:
+        if to_addr == node.node_id or to_addr == node.my_address or to_addr in BROADCAST:
             self._deliver_message(node, msg)
             return
         
