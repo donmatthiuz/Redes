@@ -33,16 +33,19 @@ cd mcp-class-system
 echo "📦 Instalando servidores MCP..."
 
 # Servidor Filesystem (oficial)
-npm install -g @modelcontextprotocol/server-filesystem
-
-# Servidor Git (no oficial - usando pip)
-echo "🔧 Instalando mcp-server-git..."
-pip install mcp-server-git
+sudo npm install -g @modelcontextprotocol/server-filesystem
 
 # Crear entorno virtual de Python
 echo "🐍 Configurando entorno Python..."
 python3 -m venv venv
 source venv/bin/activate
+
+
+
+# Servidor Git (no oficial - usando pip)
+echo "🔧 Instalando mcp-server-git..."
+pip install mcp-server-git
+
 
 # Crear requirements.txt
 cat > requirements.txt << 'EOF'
