@@ -8,6 +8,7 @@ from logs.Logs import Log
 from connection.Mensajes import Messages
 from algoritmos.TIPOS import ECHO, INFO, MENSAJE, HOLA
 from algoritmos.LSR import LSR
+from algoritmos.Djstrapuro import DijkstraPure
 from connection.Red import RedConfig
 
 class NeighborMetrics:
@@ -407,7 +408,7 @@ class Nodo_Redis:
                 time.sleep(1.0)
     
     def handle_received_message(self, message):
-        """Manejar mensaje recibido"""
+
         with self.forwarding_lock:
             try:
                 msg_type = message.get("type", "")
@@ -421,14 +422,26 @@ class Nodo_Redis:
                 elif msg_type in ECHO:
                     self.handle_echo_received(message)
                 elif msg_type in MENSAJE:
-                    # Usar algoritmo actual para procesar
-                    current_alg = self.algorithms.get(self.current_algorithm)
-                    if current_alg and hasattr(current_alg, 'process_message'):
-                        current_alg.process_message(self, message)
+                    # CAMBIO AQUÍ: Verificar si es Dijkstra
+                    if self.current_algorithm == "dijkstra":
+                        to_addr = message.get("to", "")
+                        if to_addr == self.my_address:
+                            # Mensaje para nosotros
+                            payload = message.get("payload", message.get("data", ""))
+                            self.log_message(f"[MENSAJE] Recibido de {from_addr}: {payload}")
+                            print(f"[{self.node_id}] >>> MENSAJE: {payload}")
+                        else:
+                            # Rutear con Dijkstra
+                            self._route_message_dijkstra(message)
                     else:
-                        self.log_message(f"[FORWARDING] No hay algoritmo para {self.current_algorithm}")
+                        # Usar algoritmo actual para procesar (flooding, lsr)
+                        current_alg = self.algorithms.get(self.current_algorithm)
+                        if current_alg and hasattr(current_alg, 'process_message'):
+                            current_alg.process_message(self, message)
+                        else:
+                            self.log_message(f"[FORWARDING] No hay algoritmo para {self.current_algorithm}")
 
-                elif msg_type in INFO:  # ← AGREGAR ESTA LÍNEA
+                elif msg_type in INFO:
                     # Mensajes de información (incluye LSP)
                     current_alg = self.algorithms.get(self.current_algorithm)
                     if current_alg and hasattr(current_alg, 'process_message'):
@@ -437,10 +450,9 @@ class Nodo_Redis:
                         self.log_message(f"[FORWARDING] No hay algoritmo para {self.current_algorithm}")
                 else:
                     self.log_message(f"[FORWARDING] Tipo de mensaje desconocido: {msg_type}")
-                
+                    
             except Exception as e:
                 self.log_message(f"[FORWARDING] ERROR procesando mensaje: {e}")
-    
     # =================== PROCESO DE ROUTING ===================
     
     def routing_process(self):
@@ -535,11 +547,63 @@ class Nodo_Redis:
                 "routing_table": lsr_alg.get_routing_table()
             }
         return {}
-    
+    def _route_message_dijkstra(self, message):
+        """Rutear mensaje usando Dijkstra"""
+        dijkstra_alg = self.algorithms.get("dijkstra")
+        if not dijkstra_alg:
+            self.log_message("[DIJKSTRA] Algoritmo no disponible para ruteo")
+            return False
+        
+        to_addr = message.get("to", "")
+        
+        # Obtener siguiente salto
+        next_hop_addr = dijkstra_alg.get_next_hop(self.my_address, to_addr)
+        
+        if not next_hop_addr:
+            self.log_message(f"[DIJKSTRA] No hay ruta a {to_addr}")
+            return False
+        
+        # Encontrar neighbor_id correspondiente
+        next_hop_id = None
+        for nid, addr in self.names.items():
+            if addr == next_hop_addr:
+                next_hop_id = nid
+                break
+        
+        if next_hop_id:
+            self.log_message(f"[DIJKSTRA] Ruteando a {to_addr} via {next_hop_addr}")
+            return self.send_to_neighbor(next_hop_id, message)
+        else:
+            self.log_message(f"[DIJKSTRA] No se encontró ID para next_hop {next_hop_addr}")
+            return False
+        
     def _routing_cycle_dijkstra(self):
-        """Ciclo de routing para Dijkstra - placeholder"""
-        self.log_message("[ROUTING-DIJKSTRA] Ciclo Dijkstra (no implementado)")
-        pass
+        """Ciclo de routing para Dijkstra"""
+        dijkstra_alg = self.algorithms.get("dijkstra")
+        if not dijkstra_alg:
+            self.log_message("[ROUTING-DIJKSTRA] Algoritmo no disponible")
+            return
+        
+        try:
+            # Calcular rutas desde mi dirección
+            routing_table = dijkstra_alg.get_routing_table(self.my_address)
+            
+            # Actualizar tabla de ruteo compartida
+            self.routing_table = {
+                "algorithm": "dijkstra",
+                "routes": routing_table,
+                "total_routes": len(routing_table),
+                "my_address": self.my_address
+            }
+            
+            self.log_message(f"[ROUTING-DIJKSTRA] Tabla calculada: {len(routing_table)} rutas")
+            
+            # Log de rutas encontradas
+            for dest, route_info in routing_table.items():
+                self.log_message(f"[DIJKSTRA] Ruta a {dest}: next_hop={route_info['next_hop']}, cost={route_info['cost']}")
+                
+        except Exception as e:
+            self.log_message(f"[ROUTING-DIJKSTRA] Error en ciclo: {e}")
     
     # =================== PROCESO DE HELLO ===================
     
@@ -576,7 +640,29 @@ class Nodo_Redis:
                 time.sleep(2.0)
     
     # =================== MÉTODOS PÚBLICOS ===================
-    
+    def _initialize_dijkstra_topology(self):
+        dijkstra_alg = self.algorithms.get("dijkstra")
+        if not dijkstra_alg:
+            return
+        
+        # Convertir topología de IDs a direcciones para Dijkstra
+        topology_with_addresses = {}
+        
+        for node_id, neighbors in self.topology.items():
+            node_addr = self.names.get(node_id)
+            if not node_addr:
+                continue
+            
+            topology_with_addresses[node_addr] = {}
+            for neighbor_id in neighbors:
+                neighbor_addr = self.names.get(neighbor_id)
+                if neighbor_addr:
+                    # Costo por defecto = 1
+                    topology_with_addresses[node_addr][neighbor_addr] = 1
+        
+        dijkstra_alg.load_topology(topology_with_addresses)
+        self.log_message(f"[DIJKSTRA] Topología cargada: {topology_with_addresses}")
+
     def start(self):
         """Iniciar el nodo"""
         if not self.setup_redis():
@@ -602,7 +688,14 @@ class Nodo_Redis:
         except Exception as e:
             self.log_message(f"[WARNING] Error inicializando LSR: {e}")
         
-
+        try:
+            self.algorithms["dijkstra"] = DijkstraPure()
+            self._initialize_dijkstra_topology()
+            self.log_message("[INIT] Dijkstra inicializado")
+        except ImportError:
+            self.log_message("[WARNING] No se pudo importar clase DijkstraPure")
+        except Exception as e:
+            self.log_message(f"[WARNING] Error inicializando Dijkstra: {e}")
         
         self.running = True
         
@@ -721,6 +814,9 @@ class Nodo_Redis:
         print("  lsr_topology              - Ver topología conocida por LSR")
         print("  lsr_routes                - Ver tabla de ruteo LSR") 
         print("  force_lsp                 - Forzar envío de LSP (solo LSR)")
+        print("  dijkstra_routes           - Ver tabla de ruteo Dijkstra")
+        print("  dijkstra_topology         - Ver topología Dijkstra")
+        print("  update_cost <from> <to> <cost> - Actualizar costo de enlace")
         print("  quit                      - Salir")
         print("=" * 50)
 
@@ -741,6 +837,45 @@ class Nodo_Redis:
                     print("Estadísticas:")
                     for key, value in stats.items():
                         print(f"  {key}: {value}")
+
+                elif cmd[0] == "dijkstra_routes":
+                    dijkstra_alg = self.algorithms.get("dijkstra")
+                    if dijkstra_alg:
+                        routes = dijkstra_alg.get_routing_table(self.my_address)
+                        print("Tabla de ruteo Dijkstra:")
+                        for dest, route_info in routes.items():
+                            print(f"  {dest} -> next_hop: {route_info['next_hop']}, cost: {route_info['cost']}")
+                        if not routes:
+                            print("  (No hay rutas calculadas)")
+                    else:
+                        print("Dijkstra no disponible")
+
+                elif cmd[0] == "dijkstra_topology":
+                    dijkstra_alg = self.algorithms.get("dijkstra")
+                    if dijkstra_alg:
+                        topology = dijkstra_alg.get_topology()
+                        print("Topología Dijkstra:")
+                        for node, neighbors in topology.items():
+                            print(f"  {node}: {neighbors}")
+                    else:
+                        print("Dijkstra no disponible")
+
+                elif cmd[0] == "update_cost" and len(cmd) >= 4:
+                    if self.current_algorithm == "dijkstra":
+                        from_node = cmd[1]
+                        to_node = cmd[2]
+                        try:
+                            cost = int(cmd[3])
+                            dijkstra_alg = self.algorithms.get("dijkstra")
+                            if dijkstra_alg:
+                                dijkstra_alg.update_edge_cost(from_node, to_node, cost)
+                                print(f"Costo actualizado: {from_node} -> {to_node} = {cost}")
+                            else:
+                                print("Dijkstra no disponible")
+                        except ValueError:
+                            print("Costo debe ser un número")
+                    else:
+                        print("Comando solo disponible en modo Dijkstra")
                 
                 elif cmd[0] == "neighbors":
                     current_time = time.time()
