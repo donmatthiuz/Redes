@@ -37,16 +37,20 @@ def main():
         respuesta = cliente.preguntar("¿En qué fecha nació?")
         print(f"🤖 {respuesta}\n")
         
-        print("3️⃣ Acción MCP - Clonar repositorio:")
-        respuesta = cliente.preguntar("Quiero clonar repo")
+        print("3️⃣ Acción MCP:")
+        respuesta = cliente.preguntar("Quiero hacer un apunte desde audio")
         print(f"🤖 {respuesta}\n")
+
+        # print("3️⃣ Acción MCP - Clonar repositorio:")
+        # respuesta = cliente.preguntar("Quiero clonar repo")
+        # print(f"🤖 {respuesta}\n")
         
-        # Opcionalmente, probar agregar archivo
-        continuar = input("¿Quieres probar agregar un archivo? (s/n): ").lower().strip()
-        if continuar == 's':
-            print("\n4️⃣ Acción MCP - Agregar archivo:")
-            respuesta = cliente.preguntar("Quiero agregar archivo")
-            print(f"🤖 {respuesta}\n")
+        # # Opcionalmente, probar agregar archivo
+        # continuar = input("¿Quieres probar agregar un archivo? (s/n): ").lower().strip()
+        # if continuar == 's':
+        #     print("\n4️⃣ Acción MCP - Agregar archivo:")
+        #     respuesta = cliente.preguntar("Quiero agregar archivo")
+        #     print(f"🤖 {respuesta}\n")
         
         # Permitir interacción continua
         print("\n5️⃣ Modo interactivo (escribe 'salir' para terminar):")

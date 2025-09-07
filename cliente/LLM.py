@@ -117,7 +117,7 @@ class LLMClient:
             print(f"❌ Error enviando mensaje MCP: {e}")
             return False
     
-    def _read_mcp_response(self, timeout: float = 5.0) -> Optional[dict]:
+    def _read_mcp_response(self) -> Optional[dict]:
         """Lee una respuesta del servidor MCP con timeout"""
         if not self.mcp_process or not self.mcp_process.stdout:
             return None
@@ -125,7 +125,7 @@ class LLMClient:
         try:
             # Leer con timeout básico
             import select
-            ready, _, _ = select.select([self.mcp_process.stdout], [], [], timeout)
+            ready, _, _ = select.select([self.mcp_process.stdout], [], [], None)
             
             if ready:
                 line = self.mcp_process.stdout.readline()
@@ -227,7 +227,7 @@ class LLMClient:
         }
         
         if self._send_mcp_message(tool_message):
-            response = self._read_mcp_response(timeout=10.0)  # Timeout más largo para herramientas
+            response = self._read_mcp_response()  # Timeout más largo para herramientas
             
             if response and "result" in response:
                 return response["result"]
@@ -242,6 +242,8 @@ class LLMClient:
         
         if "clonar" in mensaje_lower or "clone" in mensaje_lower:
             return "clone_repo", self._extraer_parametros_clone(mensaje)
+        elif "hacer apunte de audio" in mensaje_lower or "apunte desde audio" in mensaje_lower:
+            return "apunte_inteligente", {}
         elif "agregar archivo" in mensaje_lower or "add file" in mensaje_lower:
             return "add_file", self._extraer_parametros_file(mensaje)
         elif "listar" in mensaje_lower or "list" in mensaje_lower:
@@ -290,6 +292,9 @@ class LLMClient:
         if intencion == "chat":
             # Pregunta normal al LLM
             respuesta = self._chat_normal(mensaje)
+        elif intencion == "apunte_inteligente":
+            self.apunte_inteligente()
+            respuesta = "✅ Flujo de apunte desde audio ejecutado"
         else:
             # Acción MCP
             print(f"⏳ Ejecutando {intencion} via MCP...")
@@ -302,6 +307,51 @@ class LLMClient:
         
         self.log_completo.append(f"Asistente: {respuesta}")
         return respuesta
+    
+    
+    def apunte_inteligente(self):
+        print("\n🗣️ Vamos a crear un apunte desde un audio (mp3).")
+        
+        repo = input("📁 Repo donde guardar el apunte: ").strip()
+        clase = input("🏫 Nombre de la clase: ").strip()
+        audio_path = input("🎵 Ruta del archivo mp3: ").strip()
+        
+        # 1️⃣ Transcribir audio
+        print("⏳ Transcribiendo audio...")
+        resultado_transcripcion = self._call_mcp_tool("voice_to_text", {"voice_path": audio_path})
+        
+        if isinstance(resultado_transcripcion, dict) and "error" in resultado_transcripcion:
+            print(f"❌ Error en transcripción: {resultado_transcripcion['error']}")
+            return
+        
+        texto_transcrito = resultado_transcripcion
+        print("✅ Transcripción completada.")
+
+        # 2️⃣ Convertir a formato README con fecha
+        from datetime import datetime
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        prompt = f"""
+            Toma este texto transcrito de un audio y conviértelo en formato README para apuntes de clase.
+            - Añade un título con la fecha inicial: {fecha_hoy}
+            - Mantén secciones claras y encabezados si es posible
+            - Texto original: {texto_transcrito}
+            """
+        
+        texto_formateado = self._chat_normal(prompt)
+
+        # 3️⃣ Crear apunte en el repo
+        print("⏳ Creando apunte en el repo...")
+        resultado_apunte = self._call_mcp_tool("apunte", {
+            "repo": repo,
+            "clase": clase,
+            "contenido": texto_formateado
+        })
+        
+        if isinstance(resultado_apunte, dict) and "error" in resultado_apunte:
+            print(f"❌ Error creando apunte: {resultado_apunte['error']}")
+        else:
+            print(f"✅ Apunte creado correctamente en repo '{repo}', clase '{clase}'")
+
     
     def _chat_normal(self, mensaje: str) -> str:
         """Maneja conversación normal con el LLM"""
