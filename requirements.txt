@@ -1,4 +1,8 @@
-openai
-python-dotenv
-gitpython
-fastmcp
+openai>=1.32.0
+python-dotenv>=1.0.0
+GitPython>=3.1.36
+fastmcp>=2.12.2
+openai-whisper>=20230815
+numpy>=1.27.0
+soundfile>=0.12.1
+pydub>=0.25.1

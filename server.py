@@ -43,20 +43,17 @@ def add_file(filename: str, content: str, message: str) -> str:
         return f"✅ Archivo creado y commit realizado: {result}"
     except Exception as e:
         return f"❌ Error creando archivo: {str(e)}"
-
-@mcp.tool()
-def list_repos() -> str:
-    """
-    Lista todos los repositorios disponibles localmente.
     
-    Returns:
-        str: Lista de repositorios
-    """
-    try:
-        # Implementar según tu GitManager
-        return "📁 Repositorios disponibles: [función por implementar]"
-    except Exception as e:
-        return f"❌ Error listando repositorios: {str(e)}"
+
+# @mcp.tool()
+# def text_to_voice() -> str:
+#     try:
+#         # lo convertimos a texto y lueog lo ponemos aqui como filename
+#         result = git_manager.create_file_and_commit(filename, content, message)
+#         return f"✅ Archivo creado y commit realizado: {result}"
+#     except Exception as e:
+#         return f"❌ Error creando archivo: {str(e)}"
+    
 
 if __name__ == "__main__":
     # FastMCP maneja automáticamente STDIO cuando se ejecuta directamente
