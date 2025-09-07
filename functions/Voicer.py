@@ -19,12 +19,9 @@ class WhisperTranscriber:
         print(f"Transcribiendo audio: {audio_path}")
         result = self.model.transcribe(audio_path)
         return result["text"]
-
-# -------------------
-# Ejemplo de uso
-# -------------------
-if __name__ == "__main__":
-    transcriber = WhisperTranscriber(model_name="base")
-    texto = transcriber.transcribe("Grabación-_2_.wav")  # Puede ser mp3, wav, mp4
-    print("Texto transcrito:")
-    print(texto)
+    
+# if __name__ == "__main__":
+#     transcriber = WhisperTranscriber(model_name="base")
+#     texto = transcriber.transcribe("Grabación-_2_.wav")  # Puede ser mp3, wav, mp4
+#     print("Texto transcrito:")
+#     print(texto)
