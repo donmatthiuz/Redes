@@ -17,7 +17,8 @@ class GIT:
             self.repo = Repo.clone_from(github_url, self.repo_path)
         return f"Repositorio listo en {self.repo_path}"
 
-    def create_file_and_commit(self, filename: str, content: str, commit_message: str):
+    def create_file_and_commit(self, filename: str, content: str, commit_message: str, push=True, branch="main"):
+        """Crea un archivo, hace commit y opcionalmente pushea a remoto."""
         if self.repo is None:
             return "Repo no inicializado. Usa setup_repo primero."
         
@@ -27,7 +28,17 @@ class GIT:
         
         self.repo.index.add([filename])
         self.repo.index.commit(commit_message)
-        return f"Archivo '{filename}' creado y commit '{commit_message}' realizado."
 
+        result_msg = f"Archivo '{filename}' creado y commit '{commit_message}' realizado."
+
+        if push:
+            try:
+                origin = self.repo.remote(name="origin")
+                origin.push(branch)
+                result_msg += f" ✅ Commit pusheado a {branch}"
+            except Exception as e:
+                result_msg += f" ⚠️ Error haciendo push: {e}"
+
+        return result_msg
 
 git_manager = GIT(base_path="./repos")
