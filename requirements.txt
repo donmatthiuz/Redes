@@ -1,2 +1,2 @@
-anthropic>=0.34.0
-pathlib2>=2.3.7; python_version < '3.4'
+openai
+python-dotenv
