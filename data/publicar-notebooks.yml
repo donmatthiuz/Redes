@@ -1,0 +1,37 @@
+name: Publicar Notebooks
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Descargar el código
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      # 2. Instalar Jupyter para convertir los notebooks
+      - name: Instalar Jupyter
+        run: pip install jupyter
+
+      # 3. Buscar todos los notebooks y convertirlos a HTML
+      - name: Convertir notebooks a HTML
+        run: |
+          for nb in $(find . -type f -name "*.ipynb"); do
+            echo "📢 Publicando $nb ..."
+            jupyter nbconvert --to html "$nb"
+          done
+
+      # 4. Hacer commit de los HTML generados en la branch actual (por defecto será main si trabajas ahí)
+      - name: Commit y push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add *.html || true
+          git commit -m "Publicar notebooks convertidos" || echo "Sin cambios"
+          git push https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD
