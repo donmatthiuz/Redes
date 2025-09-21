@@ -1,7 +1,7 @@
 import whisper
 
 class WhisperTranscriber:
-    def __init__(self, model_name="base"):
+    def __init__(self, model_name="tiny"):
         """
         Inicializa el transcriptor de Whisper.
         :param model_name: Modelo de Whisper a usar ("tiny", "base", "small", "medium", "large")

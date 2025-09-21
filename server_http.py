@@ -102,7 +102,7 @@ def voice_to_text(voice_path):
         # Inicializar el modelo
         import time
         start_model = time.time()
-        transcriber = WhisperTranscriber(model_name="base")
+        transcriber = WhisperTranscriber(model_name="tiny")
         end_model = time.time()
         print(f"🟢 [DEBUG] Modelo cargado en {end_model - start_model:.2f} segundos")
 

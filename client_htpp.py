@@ -17,8 +17,8 @@ async def example():
         print("Las tools", tools)
         
         ## Uso
-        #greeting = await cliente.call_tool("greet", {"name": "Alice"})
-        #print("Gretting result", greeting)
+        greeting = await cliente.call_tool("voice_to_text", {"voice_path": "functions/Grabación-_2_.wav"})
+        print("Gretting result", greeting)
         
 
 if __name__== "__main__":
