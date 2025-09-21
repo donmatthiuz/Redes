@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+*ms_graph_api_token.json
 # C extensions
 *.so
 logs/*.txt
