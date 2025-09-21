@@ -33,14 +33,6 @@ def add_file(filename: str, content: str, message: str) -> str:
         return f"❌ Error creando archivo: {str(e)}"
     
 
-# @mcp.tool()
-# def text_to_voice() -> str:
-#     try:
-#         # lo convertimos a texto y lueog lo ponemos aqui como filename
-#         result = git_manager.create_file_and_commit(filename, content, message)
-#         return f"✅ Archivo creado y commit realizado: {result}"
-#     except Exception as e:
-#         return f"❌ Error creando archivo: {str(e)}"
 
 
 
@@ -135,9 +127,5 @@ def voice_to_text(voice_path):
 
 if __name__ == "__main__":
     # FastMCP maneja automáticamente STDIO cuando se ejecuta directamente
-    mcp.run(
-        transport="streamable-http"
-        , host="127.0.0.1"
-        , port=8000
-        
-    )
+    port = int(os.getenv("PORT", 8000))
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
