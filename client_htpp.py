@@ -1,9 +1,13 @@
 import asyncio
+import os
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+from dotenv import load_dotenv
 
 async def example():
-    transport = StreamableHttpTransport("http://127.0.0.1:8000/mcp/")
+    load_dotenv()
+    url = os.getenv("URL")
+    transport = StreamableHttpTransport(f"{url}/mcp/")
     
     async with Client(transport=transport) as cliente:
         await cliente.ping()
