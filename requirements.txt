@@ -6,3 +6,4 @@ openai-whisper>=20230815
 numpy>=1.27.0
 soundfile>=0.12.1
 pydub>=0.25.1
+msal
