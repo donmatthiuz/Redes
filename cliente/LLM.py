@@ -334,7 +334,9 @@ class LLMClient:
             Toma este texto transcrito de un audio y conviértelo en formato README para apuntes de clase.
             - Añade un título con la fecha inicial: {fecha_hoy}
             - Mantén secciones claras y encabezados si es posible
-            - Texto original: {texto_transcrito}
+            - Modifica el texto para que tenga secciones y subtitulos: {texto_transcrito}
+            - Agrega las funciones, ecuaciones si se llegan a mencionar
+            - Extiende un poco para que tenga sentido o si faltan cosas
             """
         
         texto_formateado = self._chat_normal(prompt)
@@ -351,6 +353,24 @@ class LLMClient:
             print(f"❌ Error creando apunte: {resultado_apunte['error']}")
         else:
             print(f"✅ Apunte creado correctamente en repo '{repo}', clase '{clase}'")
+            
+        prompt_calendario = f"""
+            Ahora obteniendo del texto {texto_transcrito} haz lo siguiente.
+            Pon los parametros en formato de esta manera si detectaste un evento como parcial , proyecto, clase, repaso,tareas etc.
+            FECHA(YYYY-MM-DD), HORA(HH:MM:00), Descripcion.
+            
+            - Si dice que la tarea es de mañana toma la fecha de hoy y sumale un dia
+            - Si dice que la tarea es la proxima semana sumale una semana al dia de hoy
+            
+                        
+            Esto para los eventos detectados que tendras que ponerlos en una lista de tipo
+            [FECHA(YYYY-MM-DD), HORA(HH:MM:00), Descripcion, FECHA(YYYY-MM-DD), HORA(HH:MM:00), Descripcion]
+            
+            Ojo mucho ojo solo quiero el texto de la lista sin respuestas tuyas, ni conclusiones , descripciones y o cosas tuyas. SOLO EL TEXTO EN EL FORMATO QUE TE DI
+            """
+        
+        texto_calendario = self._chat_normal(prompt_calendario)
+        print("Texto calendario", texto_calendario)
 
     
     def _chat_normal(self, mensaje: str) -> str:

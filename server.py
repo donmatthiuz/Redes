@@ -9,22 +9,14 @@ import shutil
 import os
 from functions.Voicer import WhisperTranscriber
 import yaml
-
+from functions.calendar_manager import create_event
+from dotenv import load_dotenv
 # Configurar el servidor MCP
 mcp = FastMCP("MCP Server")
 
 @mcp.tool()
 def clone_repo(url: str, name: str) -> str:
-    """
-    Clona un repositorio Git desde una URL a un directorio local.
     
-    Args:
-        url: URL del repositorio Git
-        name: Nombre del directorio local donde clonar
-    
-    Returns:
-        str: Mensaje de resultado de la operación
-    """
     try:
         result = git_manager.setup_repo(url, name)
         return f"✅ Repositorio clonado exitosamente: {result}"
@@ -33,17 +25,7 @@ def clone_repo(url: str, name: str) -> str:
 
 @mcp.tool()
 def add_file(filename: str, content: str, message: str) -> str:
-    """
-    Crea un archivo con contenido y hace commit al repositorio.
     
-    Args:
-        filename: Nombre del archivo a crear
-        content: Contenido del archivo
-        message: Mensaje del commit
-    
-    Returns:
-        str: Mensaje de resultado de la operación
-    """
     try:
         result = git_manager.create_file_and_commit(filename, content, message)
         return f"✅ Archivo creado y commit realizado: {result}"
@@ -61,6 +43,26 @@ def add_file(filename: str, content: str, message: str) -> str:
 #         return f"❌ Error creando archivo: {str(e)}"
 
 
+
+@mcp.tool()
+def create_outlook_event( event_name: str, event_date: str, start_time: str, end_time: str, description: str, attendees: str) -> str:
+    
+    try:
+        load_dotenv()
+        app_id = os.getenv("APP_ID")
+        emails = [email.strip() for email in attendees.split(",")]
+        result = create_event(
+            app_id=app_id,
+            event_name=event_name,
+            event_date=event_date,
+            start_time=start_time,
+            end_time=end_time,
+            description=description,
+            attendees_emails=emails
+        )
+        return f"✅ Evento procesado: {result}"
+    except Exception as e:
+        return f"❌ Error en create_outlook_event: {str(e)}"
 
 
 
