@@ -14,15 +14,22 @@ async def main():
     respuesta = llm.chat_normal("Quien fue alan turing")
     print(respuesta)
 
-    # 1️⃣ MCP local
+    # 1️⃣ MCP local 1
     print("\n🔹 Conectando a MCP local...")
     await llm.conectar_mcp("arxiv_mcp_server.py")
     tools_local = await llm.listar_herramientas_mcp()
     print("Herramientas MCP local:", tools_local)
     await llm.cerrar_mcp()
+    
+     # 1️⃣ MCP local 2
+    print("\n🔹 Conectando a MCP local...")
+    await llm.conectar_mcp("server.py")
+    tools_local = await llm.listar_herramientas_mcp()
+    print("Herramientas MCP local:", tools_local)
+    await llm.cerrar_mcp()
 
     # 2️⃣ MCP remoto HTTP
-    url = os.getenv("URL")  # Ej: http://localhost:8000/mcp/
+    url = os.getenv("URL")
     print("URL", url)
     print("\n🔹 Conectando a MCP remoto HTTP...")
     await llm.conectar_mcp(url, use_http=True)
