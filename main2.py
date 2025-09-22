@@ -14,14 +14,16 @@ async def main():
     respuesta = llm.chat_normal("Quien fue alan turing")
     print(respuesta)
 
-    # 1️⃣ MCP local 1
+    # MCP compañero
     print("\n🔹 Conectando a MCP local...")
     await llm.conectar_mcp("arxiv_mcp_server.py")
     tools_local = await llm.listar_herramientas_mcp()
     print("Herramientas MCP local:", tools_local)
     await llm.cerrar_mcp()
     
-     # 1️⃣ MCP local 2
+    
+    
+    # MCP local 2
     print("\n🔹 Conectando a MCP local...")
     await llm.conectar_mcp("server.py")
     tools_local = await llm.listar_herramientas_mcp()

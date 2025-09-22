@@ -1,15 +1,11 @@
 #https://otx.alienvault.com/api 
 import requests
-import os
-from dotenv import load_dotenv
 
-# Cargar variables de .env
-load_dotenv()
 
-OTX_API_KEY = os.getenv("OTX_API_KEY", "YOUR_API_KEY_HERE")
+
 OTX_BASE_URL = "https://otx.alienvault.com/api/v1/indicators/IPv4"
 
-def check_ip_reputation(ip: str):
+def check_ip_reputation(ip: str, OTX_API_KEY:str):
     """Check IP reputation using AlienVault OTX"""
     headers = {"X-OTX-API-KEY": OTX_API_KEY}
     url = f"{OTX_BASE_URL}/{ip}/general"

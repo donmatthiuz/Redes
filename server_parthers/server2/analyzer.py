@@ -8,7 +8,7 @@ def extract_ips(log_text: str):
     return re.findall(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b", log_text)
 
 
-def analyze_log_file(log_text: str):
+def analyze_log_file(log_text: str, api_key:str):
     """Analiza logs y consulta reputación de IPs sospechosas"""
     lines = log_text.splitlines()
 
@@ -26,7 +26,7 @@ def analyze_log_file(log_text: str):
     ip_reputation = {}
     for ip in suspicious_ips:
         try:
-            ip_reputation[ip] = check_ip_reputation(ip)
+            ip_reputation[ip] = check_ip_reputation(ip, api_key)
         except Exception as e:
             ip_reputation[ip] = {"error": str(e)}
 
