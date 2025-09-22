@@ -7,3 +7,7 @@ numpy>=1.27.0
 soundfile>=0.12.1
 pydub>=0.25.1
 msal
+mcp>=0.3.0
+arxiv>=2.2.0
+scholarly>=1.7.2
+habanero>=1.1.1
