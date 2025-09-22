@@ -1,0 +1,12 @@
+[project]
+name = "arxiv-mcp-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "arxiv>=2.2.0",
+    "habanero>=1.1.1",
+    "mcp>=0.3.0",
+    "scholarly>=1.7.2",
+]

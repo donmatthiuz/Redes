@@ -1,0 +1,4 @@
+mcp>=0.3.0
+arxiv>=2.2.0
+scholarly>=1.7.2
+habanero>=1.1.1
