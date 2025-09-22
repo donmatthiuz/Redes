@@ -1,6 +1,6 @@
 import re
 from collections import Counter
-from mcp_server.otx_client import check_ip_reputation
+from server_parthers.server2.otx_client import check_ip_reputation
 
 
 def extract_ips(log_text: str):

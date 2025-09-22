@@ -1,7 +1,7 @@
 # mcp_server/local_log_server.py
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-from mcp_server.analyzer import analyze_log_file
+from server_parthers.server2.analyzer import analyze_log_file
 
 app = FastAPI(title="Local Log Analyzer MCP Server", version="1.0")
 

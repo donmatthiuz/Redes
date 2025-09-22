@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import JSONResponse
-from mcp_server.analyzer import analyze_log_file
+from server_parthers.server2.analyzer import analyze_log_file
 import json
 
 app = FastAPI(title="MCP Log Analyzer", version="1.0")
