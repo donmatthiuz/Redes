@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-ArXiv MCP Server - Provides access to arXiv papers through MCP protocol.
-Requires: pip install mcp arxiv
-Usage: python arxiv_mcp_server.py
-"""
+
 
 import os
 from dotenv import load_dotenv
@@ -136,5 +132,6 @@ async def generate_bibtex(doi:str=None, title:str=None, authors:str=None, year:s
     return 'Could not generate the bibtex citation'
 
 if __name__ == "__main__":
+    print("Ejemplo")
     # Initialize and run the server
     mcp.run(transport='stdio')

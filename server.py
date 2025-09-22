@@ -9,7 +9,7 @@ import shutil
 import os
 from functions.Voicer import WhisperTranscriber
 import yaml
-from functions.calendar_manager import create_event
+
 from dotenv import load_dotenv
 # Configurar el servidor MCP
 mcp = FastMCP("MCP Server")
