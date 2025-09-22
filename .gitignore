@@ -26,7 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 user_tokens/
-
+*.pdf
 # PyInstaller
 *.manifest
 *.spec
