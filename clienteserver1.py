@@ -1,6 +1,6 @@
 import asyncio
 from fastmcp import Client
-
+ 
 async def main():
     async with Client("arxiv_mcp_server.py") as client:
         # 1. Listar herramientas

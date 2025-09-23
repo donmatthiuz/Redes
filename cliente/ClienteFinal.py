@@ -121,41 +121,105 @@ class LLMClientAsync:
             "sort_order": "descending"
         })
 
-        download_result = None
-        if paper_id:
-            result = await mcp.call_tool("download_paper_arxiv", {
-                "id": paper_id,
-                "filename": filename
+        print("\n=== RESULTADOS DE BÚSQUEDA ===\n", search_result)
+
+        download_dir = await mcp.call_tool("get_download_root")
+        
+        print("\nCarpeta de descargas:", download_dir)
+
+        download_result = await mcp.call_tool("download_paper_arxiv", {
+            "id": paper_id,
+            "filename": filename
+        })
+
+        print("\nResultado descarga:", download_result)
+
+        bibtex = await mcp.call_tool("generate_bibtex", {
+            "title": "An Example Paper",
+            "authors": "John Doe",
+            "year": "2023"
+        })
+
+        print("\nBibTeX generado:\n", bibtex)
+
+
+        
+
+    async def caso_uso_log_analyzer(self, server_name: str, filepath: str):
+        mcp = self.mcp_clients.get(server_name)
+        if not mcp:
+            return {"error": "No hay conexión MCP activa para este servidor"}
+        
+        result = await mcp.call_tool("analyze_logs", {
+                "file_path": filepath
             })
-            # Extraer resultado real
-            download_result = result.data if hasattr(result, "data") else result
-
-        bibtex = None
-        if search_result and hasattr(search_result, "data") and "results" in search_result.data:
-            papers = search_result.data["results"]
-            if len(papers) > 0:
-                paper = papers[0]
-                bibtex_result = await mcp.call_tool("generate_bibtex", {
-                    "title": paper.get("title", ""),
-                    "authors": ", ".join(paper.get("authors", [])),
-                    "year": paper.get("year", "")
-                })
-                bibtex = bibtex_result.data if hasattr(bibtex_result, "data") else bibtex_result
-
-        return {
-            "search_result": search_result.data if hasattr(search_result, "data") else search_result,
-            "download_result": download_result,
-            "bibtex": bibtex
-        }
-
-    async def caso_uso_log_analyzer(self, server_name: str, **kwargs):
-        return await self.call_mcp_tool(server_name, "analyze_logs", kwargs)
+        print("\n📊 Resultado del análisis:")
+        
+        # El resultado viene en el formato MCP estándar
+        if result and hasattr(result, 'content'):
+            for content_item in result.content:
+                if content_item.type == 'text':
+                    print(content_item.text)
+        elif isinstance(result, dict) and 'content' in result:
+            for content_item in result['content']:
+                if content_item['type'] == 'text':
+                    print(content_item['text'])
+        else:
+            print(f"Resultado inesperado: {result}")
 
     async def caso_uso_multiuser(self, server_name: str, **kwargs):
         return "Función multi-user ejecutada (vacía por ahora)"
 
     async def caso_uso_server_py(self, server_name: str, **kwargs):
-        return "Función server.py ejecutada (vacía por ahora)"
+        mcp = self.mcp_clients.get(server_name)
+        if not mcp:
+            return {"error": "No hay conexión MCP activa para este servidor"}
+        
+        repo = input("📁 Repo donde guardar el apunte: ").strip()
+        clase = input("🏫 Nombre de la clase: ").strip()
+        audio_path = input("🎵 Ruta del archivo mp3: ").strip()
+
+        print("⏳ Transcribiendo audio...")
+        resultado_transcripcion = await mcp.call_tool("voice_to_text", {"voice_path": audio_path})
+
+        print("RESULTADO TRANSCRIPCION", resultado_transcripcion)
+
+        if isinstance(resultado_transcripcion, dict) and "error" in resultado_transcripcion:
+            print(f"❌ Error en transcripción: {resultado_transcripcion['error']}")
+            return
+
+        texto_transcrito = resultado_transcripcion
+        print("✅ Transcripción completada.")
+
+        from datetime import datetime
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+
+        prompt = f"""
+            Toma este texto transcrito de un audio y conviértelo en formato README para apuntes de clase.
+            - Añade un título con la fecha inicial: {fecha_hoy}
+            - Mantén secciones claras y encabezados si es posible
+            - Modifica el texto para que tenga secciones y subtitulos: {texto_transcrito}
+            - Agrega las funciones, ecuaciones si se llegan a mencionar
+            - Extiende un poco para que tenga sentido o si faltan cosas
+            """
+        
+        texto_formateado = self.chat_normal(prompt)
+        
+
+        print(f"⏳ Creando apunte en el repo...", texto_formateado)
+        resultado_apunte = await mcp.call_tool("apunte", {
+            "repo": repo,
+            "clase": clase,
+            "contenido": texto_formateado
+        })
+
+        if isinstance(resultado_apunte, dict) and "error" in resultado_apunte:
+            print(f"❌ Error creando apunte: {resultado_apunte['error']}")
+        else:
+            print(f"✅ Apunte creado correctamente en repo '{repo}', clase '{clase}'")
+        
+        return "Caso de uso reportado"
+    
 
     async def ejecutar_caso_uso(self, server_name: str, **kwargs):
         server_lower = server_name.lower()
@@ -164,7 +228,10 @@ class LLMClientAsync:
             filename = kwargs.get("filename") or input("Coloque nombre al paper: ")
             return await self.caso_uso_arxiv(server_name, paper_id=paperid, filename=filename)
         elif "127.0.0.1:8001" in server_lower or "log-analyzer" in server_lower:
-            return await self.caso_uso_log_analyzer(server_name, **kwargs)
+
+            filepath = input("Coloque el path del .log a analizar: ")
+
+            return await self.caso_uso_log_analyzer(server_name, filepath)
         elif "redes-yel3" in server_lower or "multi-user" in server_lower:
             return await self.caso_uso_multiuser(server_name, **kwargs)
         elif "server.py" in server_lower or "mcp server" in server_lower:
