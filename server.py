@@ -10,6 +10,12 @@ import os
 from functions.Voicer import WhisperTranscriber
 import yaml
 
+
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
+
 from dotenv import load_dotenv
 # Configurar el servidor MCP
 mcp = FastMCP("MCP Server")
