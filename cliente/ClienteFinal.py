@@ -25,21 +25,23 @@ class LLMClientAsync:
         self.client = OpenAI(api_key=api_key)
         self.conversation_history = []
         self.log_completo = []
-        self.mcp_client: Optional[Client] = None
-        self.tools_disponibles: list[dict] = []
-        self.servers_tools: dict[str, list[str]] = {}  # server -> herramientas
+
+        self.mcp_clients: dict[str, Client] = {}  # servidor -> cliente
+        self.tools_disponibles: dict[str, list[str]] = {}  # servidor -> lista de herramientas
 
     # ------------------- Conexión MCP -------------------
     async def conectar_mcp(self, server_path_or_url: str, use_http: bool = False):
         if use_http:
             transport = StreamableHttpTransport(server_path_or_url)
-            self.mcp_client = await Client(transport=transport).__aenter__()
+            client = await Client(transport=transport).__aenter__()
         else:
-            self.mcp_client = await Client(server_path_or_url).__aenter__()
+            client = await Client(server_path_or_url).__aenter__()
 
-        self.tools_disponibles = await self.mcp_client.list_tools()
-        tool_names = [t.name for t in self.tools_disponibles]
-        self.servers_tools[server_path_or_url] = tool_names
+        tools = await client.list_tools()
+        tool_names = [t.name for t in tools]
+
+        self.mcp_clients[server_path_or_url] = client
+        self.tools_disponibles[server_path_or_url] = tool_names
 
         logger.info(f"Conectado a MCP '{server_path_or_url}' con herramientas: {tool_names}")
         self.log_completo.append({
@@ -49,49 +51,51 @@ class LLMClientAsync:
         })
 
     async def cerrar_mcp(self):
-        if self.mcp_client:
-            await self.mcp_client.__aexit__(None, None, None)
-            self.mcp_client = None
-            logger.info("Conexión MCP cerrada")
-            self.log_completo.append({"accion": "cerrar_mcp"})
+        for server, client in self.mcp_clients.items():
+            await client.__aexit__(None, None, None)
+            logger.info(f"Conexión MCP '{server}' cerrada")
+        self.mcp_clients.clear()
+        self.tools_disponibles.clear()
+        self.log_completo.append({"accion": "cerrar_mcp"})
 
     # ------------------- Llamada a herramientas MCP -------------------
-    async def call_mcp_tool(self, tool_name: str, arguments: dict) -> Any:
-        if not self.mcp_client:
-            result = {"error": "No hay conexión MCP activa"}
-        elif tool_name not in [t.name for t in self.tools_disponibles]:
-            result = {"error": f"Herramienta '{tool_name}' no encontrada. Disponibles: {[t.name for t in self.tools_disponibles]}"}
-        else:
-            try:
-                result = await self.mcp_client.call_tool(tool_name, arguments)
-            except Exception as e:
-                result = {"error": str(e)}
+    async def call_mcp_tool(self, server_name: str, tool_name: str, arguments: dict) -> Any:
+        if server_name not in self.mcp_clients:
+            return {"error": "No hay conexión MCP activa para este servidor"}
 
-        logger.info(f"Llamada a herramienta MCP '{tool_name}' con args {arguments}. Resultado: {result}")
+        client = self.mcp_clients[server_name]
+        if tool_name not in self.tools_disponibles.get(server_name, []):
+            return {"error": f"Herramienta '{tool_name}' no encontrada en {server_name}"}
+
+        try:
+            result = await client.call_tool(tool_name, arguments)
+        except Exception as e:
+            result = {"error": str(e)}
+
+        logger.info(f"Servidor: {server_name} | Llamada a herramienta: {tool_name} | Args: {arguments} | Resultado: {result}")
         self.log_completo.append({
             "accion": "call_tool",
+            "server": server_name,
             "tool": tool_name,
             "arguments": arguments,
             "resultado": result
         })
         return result
 
-    async def listar_herramientas_mcp(self):
-        if self.mcp_client:
-            tools = [tool.name for tool in await self.mcp_client.list_tools()]
-            logger.info(f"Herramientas MCP disponibles: {tools}")
-            self.log_completo.append({"accion": "listar_herramientas", "resultado": tools})
+    async def listar_herramientas_mcp(self, server_name: str):
+        if server_name in self.mcp_clients:
+            tools = [tool.name for tool in await self.mcp_clients[server_name].list_tools()]
+            self.tools_disponibles[server_name] = tools
             return tools
         return []
 
     async def mostrar_servers_y_tools(self):
-        """Devuelve todos los servers y sus herramientas"""
-        return self.servers_tools
+        return self.tools_disponibles
 
     # ------------------- Casos de uso de cada servidor MCP -------------------
     async def listar_casos_uso_mcp(self):
         casos_uso = {}
-        for server, tools in self.servers_tools.items():
+        for server in self.mcp_clients.keys():
             s = server.lower()
             if "arxiv" in s:
                 casos_uso[server] = "Buscar y descargar papers de arXiv, generar BibTeX"
@@ -106,28 +110,65 @@ class LLMClientAsync:
         return casos_uso
 
     # ------------------- Funciones vacías por servidor -------------------
-    async def caso_uso_arxiv(self, **kwargs):
-        return "Función arxiv ejecutada (vacía por ahora)"
+    async def caso_uso_arxiv(self, server_name: str, query: str = "cat:cs.AI deep learning", paper_id: str = None, filename: str = "paper.pdf"):
+        mcp = self.mcp_clients.get(server_name)
+        if not mcp:
+            return {"error": "No hay conexión MCP activa para este servidor"}
 
-    async def caso_uso_log_analyzer(self, **kwargs):
-        return "Función log-analyzer ejecutada (vacía por ahora)"
+        search_result = await mcp.call_tool("search_arxiv", {
+            "query": query,
+            "sort_by": "relevance",
+            "sort_order": "descending"
+        })
 
-    async def caso_uso_multiuser(self, **kwargs):
+        download_result = None
+        if paper_id:
+            result = await mcp.call_tool("download_paper_arxiv", {
+                "id": paper_id,
+                "filename": filename
+            })
+            # Extraer resultado real
+            download_result = result.data if hasattr(result, "data") else result
+
+        bibtex = None
+        if search_result and hasattr(search_result, "data") and "results" in search_result.data:
+            papers = search_result.data["results"]
+            if len(papers) > 0:
+                paper = papers[0]
+                bibtex_result = await mcp.call_tool("generate_bibtex", {
+                    "title": paper.get("title", ""),
+                    "authors": ", ".join(paper.get("authors", [])),
+                    "year": paper.get("year", "")
+                })
+                bibtex = bibtex_result.data if hasattr(bibtex_result, "data") else bibtex_result
+
+        return {
+            "search_result": search_result.data if hasattr(search_result, "data") else search_result,
+            "download_result": download_result,
+            "bibtex": bibtex
+        }
+
+    async def caso_uso_log_analyzer(self, server_name: str, **kwargs):
+        return await self.call_mcp_tool(server_name, "analyze_logs", kwargs)
+
+    async def caso_uso_multiuser(self, server_name: str, **kwargs):
         return "Función multi-user ejecutada (vacía por ahora)"
 
-    async def caso_uso_server_py(self, **kwargs):
+    async def caso_uso_server_py(self, server_name: str, **kwargs):
         return "Función server.py ejecutada (vacía por ahora)"
 
     async def ejecutar_caso_uso(self, server_name: str, **kwargs):
         server_lower = server_name.lower()
         if "arxiv" in server_lower:
-            return await self.caso_uso_arxiv(**kwargs)
+            paperid = kwargs.get("paper_id") or input("Coloque el id del paper (ejemplo: 2301.12345v1): ")
+            filename = kwargs.get("filename") or input("Coloque nombre al paper: ")
+            return await self.caso_uso_arxiv(server_name, paper_id=paperid, filename=filename)
         elif "127.0.0.1:8001" in server_lower or "log-analyzer" in server_lower:
-            return await self.caso_uso_log_analyzer(**kwargs)
+            return await self.caso_uso_log_analyzer(server_name, **kwargs)
         elif "redes-yel3" in server_lower or "multi-user" in server_lower:
-            return await self.caso_uso_multiuser(**kwargs)
+            return await self.caso_uso_multiuser(server_name, **kwargs)
         elif "server.py" in server_lower or "mcp server" in server_lower:
-            return await self.caso_uso_server_py(**kwargs)
+            return await self.caso_uso_server_py(server_name, **kwargs)
         else:
             return f"No se reconoce el servidor {server_name}"
 
@@ -142,7 +183,7 @@ class LLMClientAsync:
                 server = mensaje.split("ejecutar caso de uso")[-1].strip()
                 respuesta = asyncio.run(self.ejecutar_caso_uso(server))
             elif "servers mcp" in mensaje.lower():
-                servers_info = "\n".join(f"{srv}: {tools}" for srv, tools in self.servers_tools.items())
+                servers_info = "\n".join(f"{srv}: {tools}" for srv, tools in self.tools_disponibles.items())
                 respuesta = f"Servidores MCP conectados y sus herramientas:\n{servers_info or 'No hay servidores conectados'}"
             else:
                 response = self.client.chat.completions.create(
