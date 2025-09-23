@@ -1,11 +1,14 @@
 import os
 import asyncio
+import nest_asyncio
 import logging
-from dotenv import load_dotenv
+from typing import Any, Optional
 from openai import OpenAI
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from typing import Any, Optional
+
+# Permite ejecutar coroutines dentro de un loop ya corriendo
+nest_asyncio.apply()
 
 # ------------------- Configuración del logger -------------------
 logger = logging.getLogger("LLMClientAsync")
@@ -26,6 +29,7 @@ class LLMClientAsync:
         self.tools_disponibles: list[dict] = []
         self.servers_tools: dict[str, list[str]] = {}  # server -> herramientas
 
+    # ------------------- Conexión MCP -------------------
     async def conectar_mcp(self, server_path_or_url: str, use_http: bool = False):
         if use_http:
             transport = StreamableHttpTransport(server_path_or_url)
@@ -51,6 +55,7 @@ class LLMClientAsync:
             logger.info("Conexión MCP cerrada")
             self.log_completo.append({"accion": "cerrar_mcp"})
 
+    # ------------------- Llamada a herramientas MCP -------------------
     async def call_mcp_tool(self, tool_name: str, arguments: dict) -> Any:
         if not self.mcp_client:
             result = {"error": "No hay conexión MCP activa"}
@@ -83,11 +88,60 @@ class LLMClientAsync:
         """Devuelve todos los servers y sus herramientas"""
         return self.servers_tools
 
+    # ------------------- Casos de uso de cada servidor MCP -------------------
+    async def listar_casos_uso_mcp(self):
+        casos_uso = {}
+        for server, tools in self.servers_tools.items():
+            s = server.lower()
+            if "arxiv" in s:
+                casos_uso[server] = "Buscar y descargar papers de arXiv, generar BibTeX"
+            elif "127.0.0.1:8001" in s or "log-analyzer" in s:
+                casos_uso[server] = "Analizar archivos de logs y detectar anomalías"
+            elif "redes-yel3" in s or "multi-user" in s:
+                casos_uso[server] = "Autenticación multiusuario y gestión de eventos de Outlook"
+            elif "server.py" in s or "mcp server" in s:
+                casos_uso[server] = "Clonar repositorios, gestionar archivos, convertir voz a texto y crear apuntes"
+            else:
+                casos_uso[server] = "Caso de uso no definido aún"
+        return casos_uso
+
+    # ------------------- Funciones vacías por servidor -------------------
+    async def caso_uso_arxiv(self, **kwargs):
+        return "Función arxiv ejecutada (vacía por ahora)"
+
+    async def caso_uso_log_analyzer(self, **kwargs):
+        return "Función log-analyzer ejecutada (vacía por ahora)"
+
+    async def caso_uso_multiuser(self, **kwargs):
+        return "Función multi-user ejecutada (vacía por ahora)"
+
+    async def caso_uso_server_py(self, **kwargs):
+        return "Función server.py ejecutada (vacía por ahora)"
+
+    async def ejecutar_caso_uso(self, server_name: str, **kwargs):
+        server_lower = server_name.lower()
+        if "arxiv" in server_lower:
+            return await self.caso_uso_arxiv(**kwargs)
+        elif "127.0.0.1:8001" in server_lower or "log-analyzer" in server_lower:
+            return await self.caso_uso_log_analyzer(**kwargs)
+        elif "redes-yel3" in server_lower or "multi-user" in server_lower:
+            return await self.caso_uso_multiuser(**kwargs)
+        elif "server.py" in server_lower or "mcp server" in server_lower:
+            return await self.caso_uso_server_py(**kwargs)
+        else:
+            return f"No se reconoce el servidor {server_name}"
+
+    # ------------------- Chat normal con LLM -------------------
     def chat_normal(self, mensaje: str) -> str:
         self.conversation_history.append({"role": "user", "content": mensaje})
         try:
-            # Comprobación especial para mostrar servers MCP
-            if "servers mcp" in mensaje.lower():
+            if "listar casos de uso" in mensaje.lower():
+                respuesta = asyncio.run(self.listar_casos_uso_mcp())
+            elif "ejecutar caso de uso" in mensaje.lower():
+                # Extraemos el servidor del mensaje
+                server = mensaje.split("ejecutar caso de uso")[-1].strip()
+                respuesta = asyncio.run(self.ejecutar_caso_uso(server))
+            elif "servers mcp" in mensaje.lower():
                 servers_info = "\n".join(f"{srv}: {tools}" for srv, tools in self.servers_tools.items())
                 respuesta = f"Servidores MCP conectados y sus herramientas:\n{servers_info or 'No hay servidores conectados'}"
             else:
@@ -98,20 +152,21 @@ class LLMClientAsync:
                     temperature=0.7
                 )
                 respuesta = response.choices[0].message.content
-            self.conversation_history.append({"role": "assistant", "content": respuesta})
+
+            self.conversation_history.append({"role": "assistant", "content": str(respuesta)})
             logger.info(f"Usuario: {mensaje} | LLM: {respuesta}")
             self.log_completo.append({
                 "accion": "chat_normal",
                 "mensaje_usuario": mensaje,
-                "respuesta_llm": respuesta
+                "respuesta_llm": str(respuesta)
             })
-            return respuesta
+            return str(respuesta)
         except Exception as e:
             logger.error(f"Error al comunicarse con OpenAI: {e}")
             return f"Error al comunicarse con OpenAI: {e}"
 
+    # ------------------- Mostrar log completo -------------------
     def mostrar_log_completo(self):
         logger.info("=== LOG COMPLETO ===")
         for entry in self.log_completo:
             logger.info(entry)
-
