@@ -1,11 +1,13 @@
+import os
 import asyncio
+import logging
+from dotenv import load_dotenv
 from openai import OpenAI
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from typing import Any, Optional, Dict
-import logging
+from typing import Any, Optional
 
-# Configuración del logger
+# ------------------- Configuración del logger -------------------
 logger = logging.getLogger("LLMClientAsync")
 logger.setLevel(logging.INFO)
 handler = logging.FileHandler("llm_mcp.log", encoding="utf-8")
@@ -13,15 +15,16 @@ formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-
+# ------------------- Clase LLMClientAsync -------------------
 class LLMClientAsync:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.client = OpenAI(api_key=api_key)
         self.conversation_history = []
-        self.log_completo = []  # log interno de todas las interacciones
+        self.log_completo = []
         self.mcp_client: Optional[Client] = None
         self.tools_disponibles: list[dict] = []
+        self.servers_tools: dict[str, list[str]] = {}  # server -> herramientas
 
     async def conectar_mcp(self, server_path_or_url: str, use_http: bool = False):
         if use_http:
@@ -31,11 +34,14 @@ class LLMClientAsync:
             self.mcp_client = await Client(server_path_or_url).__aenter__()
 
         self.tools_disponibles = await self.mcp_client.list_tools()
-        logger.info(f"Conectado a MCP con herramientas: {[t.name for t in self.tools_disponibles]}")
+        tool_names = [t.name for t in self.tools_disponibles]
+        self.servers_tools[server_path_or_url] = tool_names
+
+        logger.info(f"Conectado a MCP '{server_path_or_url}' con herramientas: {tool_names}")
         self.log_completo.append({
             "accion": "conectar_mcp",
             "server": server_path_or_url,
-            "tools": [t.name for t in self.tools_disponibles]
+            "tools": tool_names
         })
 
     async def cerrar_mcp(self):
@@ -73,16 +79,25 @@ class LLMClientAsync:
             return tools
         return []
 
+    async def mostrar_servers_y_tools(self):
+        """Devuelve todos los servers y sus herramientas"""
+        return self.servers_tools
+
     def chat_normal(self, mensaje: str) -> str:
         self.conversation_history.append({"role": "user", "content": mensaje})
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=self.conversation_history,
-                max_tokens=500,
-                temperature=0.7
-            )
-            respuesta = response.choices[0].message.content
+            # Comprobación especial para mostrar servers MCP
+            if "servers mcp" in mensaje.lower():
+                servers_info = "\n".join(f"{srv}: {tools}" for srv, tools in self.servers_tools.items())
+                respuesta = f"Servidores MCP conectados y sus herramientas:\n{servers_info or 'No hay servidores conectados'}"
+            else:
+                response = self.client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=self.conversation_history,
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                respuesta = response.choices[0].message.content
             self.conversation_history.append({"role": "assistant", "content": respuesta})
             logger.info(f"Usuario: {mensaje} | LLM: {respuesta}")
             self.log_completo.append({
@@ -99,3 +114,4 @@ class LLMClientAsync:
         logger.info("=== LOG COMPLETO ===")
         for entry in self.log_completo:
             logger.info(entry)
+

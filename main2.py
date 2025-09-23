@@ -100,7 +100,7 @@ async def main():
     # ---------------- MCP remoto HTTP ----------------
     url_remoto = os.getenv("URL")
     logger.info(f"🔹 Conectando a MCP remoto HTTP: {url_remoto}")
-    await llm.conectar_mcp(url_remoto, use_http=True)
+    await llm.conectar_mcp(f"{url_remoto}/mcp/", use_http=True)
     tools = await llm.listar_herramientas_mcp()
     logger.info(f"Herramientas MCP remoto: {tools}")
     await llm.cerrar_mcp()
