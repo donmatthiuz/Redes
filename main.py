@@ -33,13 +33,13 @@ async def main():
     await llm.conectar_mcp("server.py")
     await llm.conectar_mcp(f"{url_remoto}/mcp/", use_http=True)
     await llm.conectar_mcp("http://127.0.0.1:8001/jsonrpc", use_http=True)
-
+    salida = True
     # Bucle infinito de interacción con LLM
     print("💬 Escribe tus preguntas al LLM (escribe 'salir' para terminar)")
-    while True:
+    while salida:
         mensaje = input("Tú: ")
         if mensaje.lower() in ["salir", "exit"]:
-            break
+            salida = False
         respuesta = llm.chat_normal(mensaje)
         print(f"LLM: {respuesta}")
 
