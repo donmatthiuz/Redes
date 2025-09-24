@@ -46,7 +46,6 @@ async def main():
     print("         - arxiv_mcp_server.py → buscar papers de arXiv")
     print("         - server.py → transcribir audio, crear apuntes y eventos en calendario")
     print("         - http://127.0.0.1:8001/jsonrpc → analizar archivos .log")
-    print("         - <URL_REMOTO>/mcp/ → autenticación multiusuario y eventos de Outlook")
     print("5️⃣  Escribir 'salir' → terminar programa.")
     print("==============================\n")
 
