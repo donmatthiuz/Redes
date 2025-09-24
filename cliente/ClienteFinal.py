@@ -6,6 +6,10 @@ from typing import Any, Optional
 from openai import OpenAI
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+from functions.cliente_http_outlok import authenticate_user, create_sample_event, create_event_target
+import ast
+import re
+import json
 
 # Permite ejecutar coroutines dentro de un loop ya corriendo
 nest_asyncio.apply()
@@ -217,6 +221,69 @@ class LLMClientAsync:
             print(f"❌ Error creando apunte: {resultado_apunte['error']}")
         else:
             print(f"✅ Apunte creado correctamente en repo '{repo}', clase '{clase}'")
+
+
+        prompt_calendario = f'''Ahora obteniendo del texto {texto_transcrito} haz lo siguiente.
+            Pon los parametros en formato de esta manera si detectaste un evento como parcial , proyecto, clase, repaso,tareas etc.
+            FECHA(YYYY-MM-DD), HORA(HH:MM y en formato 24 horas), Descripcion.
+
+            - Si dice que la tarea es de mañana toma la fecha de hoy y sumale un dia
+            - Si dice que la tarea es la proxima semana sumale una semana al dia de hoy
+
+            Esto para los eventos detectados que tendras que ponerlos en una lista de tipo
+            [
+            ["FECHA(YYYY-MM-DD)", "HORA(HH:MM)", "Descripcion"],
+            ["FECHA2(YYYY-MM-DD)", "HORA2(HH:MM)", "Descripcion2"]
+            ]
+
+            Si solo hay un evento igualr ponerlo en un 
+            [
+            ["FECHA(YYYY-MM-DD)", "HORA(HH:MM:00)", "Descripcion"]
+            ]
+
+            Ojo mucho ojo solo quiero el texto de la lista sin respuestas tuyas, ni conclusiones , descripciones y o cosas tuyas. SOLO EL TEXTO EN EL FORMATO QUE TE DI
+            '''
+
+        
+
+        texto_calendario = self.chat_normal(prompt_calendario)
+
+        print(texto_calendario)
+
+       
+
+        user_id = input("Ingresa tu identificador de usuario para el calendario (email recomendado): ").strip()
+        
+        if not user_id:
+            print("❌ Debes proporcionar un identificador de usuario")
+            return
+        mcp_remoto = self.mcp_clients.get(f"https://redes-yel3.onrender.com/mcp/")
+
+        authenticated = await authenticate_user(mcp_remoto, user_id)
+
+        if authenticated:
+            print(f"\n🎉 Usuario {user_id} autenticado correctamente!")
+            eventos = json.loads(texto_calendario)
+            for evento in eventos:
+                fecha, hora, descripcion = evento
+                hora_partes = hora.split(':')
+                print(hora)
+
+                hora_fin = f"{(int(hora_partes[0]) + 1) % 24:02d}:{hora_partes[1]}"
+                print(hora_fin)
+
+                await create_event_target(
+                    client=mcp_remoto,
+                    user_id=user_id,
+                    eventname=descripcion,
+                    eventadate=fecha,
+                    start=hora,
+                    end=hora_fin,
+                    descrip=descripcion
+                )
+
+
+    
         
         return "Caso de uso reportado"
     
