@@ -36,8 +36,16 @@ while True:
         if df.empty:
             st.write("Esperando datos...")
         else:
-            st.subheader("Gráfica en vivo")
-            st.line_chart(df[["temperatura", "humedad", "direccion_viento"]])
+
+            st.subheader("📈 Gráfica de Temperatura")
+            st.line_chart(df["temperatura"])
+
+            st.subheader("💧 Gráfica de Humedad")
+            st.line_chart(df["humedad"])
+
+            st.subheader("🧭 Dirección del Viento (frecuencia)")
+            st.bar_chart(df["direccion_viento"].value_counts())
+
 
             st.subheader("Últimos datos")
             st.dataframe(df.tail(10), use_container_width=True)
