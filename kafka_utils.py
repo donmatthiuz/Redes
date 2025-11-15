@@ -4,8 +4,8 @@ import logging
 from kafka.admin import KafkaAdminClient
 
 # Configuración
-KAFKA_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
-TOPIC_NAME = 'test-topic'
+KAFKA_SERVERS = 'iot.redesuvg.cloud:9092'
+TOPIC_NAME = '22982'
 
 # Configuración de logging
 LOG_FILE = os.getenv('LOG_FILE', '/app/logs/app.log')
