@@ -1,6 +1,2 @@
 kafka-python==2.0.2
-# O si prefieres confluent-kafka (más performante)
-# confluent-kafka==2.3.0
-
-# Opcional: para auto-restart durante desarrollo
-# watchdog==3.0.0
+numpy
