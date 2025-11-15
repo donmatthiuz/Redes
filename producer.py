@@ -1,16 +1,18 @@
-import os 
-import time 
-from kafka import KafkaProducer 
-from kafka.errors import KafkaError, NoBrokersAvailable 
-import json 
+import os
+import time
+import json
+import random
+import threading
 import numpy as np
-from kafka_utils import KAFKA_SERVERS, TOPIC_NAME, wait_for_kafka, setup_logger 
- 
-# Configurar logger 
+from kafka import KafkaProducer
+from kafka.errors import KafkaError, NoBrokersAvailable
+
+from kafka_utils import KAFKA_SERVERS, TOPIC_NAME, wait_for_kafka, setup_logger
+
+# Configurar logger
 logger = setup_logger('producer')
 
 # Parámetros
-NUM_SENSORES = 5
 DIRECCIONES_VIENTO = ['N', 'NO', 'O', 'SO', 'S', 'SE', 'E', 'NE']
 
 TEMP_MEDIA = 25.0
@@ -23,31 +25,67 @@ HUMEDAD_STD = 20.0
 HUMEDAD_MIN = 0
 HUMEDAD_MAX = 100
 
+# Estado compartido donde cada sensor escribe su última lectura
+shared_state = {
+    "temperatura": None,
+    "humedad": None,
+    "direccion_viento": None
+}
+state_lock = threading.Lock()
+
+
+# ------------------ GENERADORES (cada sensor solo su medida) ------------------
 
 def generar_temperatura():
-    temp = np.random.normal(TEMP_MEDIA, TEMP_STD)
-    temp = np.clip(temp, TEMP_MIN, TEMP_MAX)
-    return round(temp, 2)
+    # Distribución normal centrada en TEMP_MEDIA, recortada al rango
+    t = np.random.normal(TEMP_MEDIA, TEMP_STD)
+    t = np.clip(t, TEMP_MIN, TEMP_MAX)
+    # convertir a float nativo con 2 decimales
+    return float(round(float(t), 2))
 
 
 def generar_humedad():
-    humedad = np.random.normal(HUMEDAD_MEDIA, HUMEDAD_STD)
-    humedad = np.clip(humedad, HUMEDAD_MIN, HUMEDAD_MAX)
-    return int(round(humedad))
+    h = np.random.normal(HUMEDAD_MEDIA, HUMEDAD_STD)
+    h = np.clip(h, HUMEDAD_MIN, HUMEDAD_MAX)
+    return int(round(float(h)))  # entero nativo
 
 
 def generar_direccion_viento():
-    return np.random.choice(DIRECCIONES_VIENTO)
+    return str(np.random.choice(DIRECCIONES_VIENTO))
 
 
-def generar_lectura_sensores(sensor_id):
-    return {
-        "sensor_id": sensor_id,
-        "temperatura": generar_temperatura(),
-        "humedad": generar_humedad(),
-        "direccion_viento": generar_direccion_viento()
-    }
+# ------------------ WORKERS DE SENSORES ------------------
 
+def sensor_temperatura_worker():
+    while True:
+        t = generar_temperatura()
+        with state_lock:
+            shared_state['temperatura'] = t
+        logger.debug(f"[SENSOR-Temp] actualizado: {t}")
+        time.sleep(5)  # frecuencia interna de muestreo (ajustable)
+
+
+def sensor_humedad_worker():
+    
+    while True:
+        h = generar_humedad()
+        with state_lock:
+            shared_state['humedad'] = h
+        logger.debug(f"[SENSOR-Hum] actualizado: {h}")
+        time.sleep(5)
+
+
+def sensor_viento_worker():
+   
+    while True:
+        d = generar_direccion_viento()
+        with state_lock:
+            shared_state['direccion_viento'] = d
+        logger.debug(f"[SENSOR-Viento] actualizado: {d}")
+        time.sleep(5)
+
+
+# ------------------ PRODUCER ------------------
 
 def create_producer():
     max_retries = 5
@@ -72,39 +110,73 @@ def create_producer():
     return None
 
 
+def producer_loop(producer, node_key="Nodo1"):
+    """
+    Cada intervalo (aleatorio entre 15 y 30s) toma las lecturas más recientes
+    y envía un único mensaje JSON combinado.
+    """
+    contador = 0
+    while True:
+        # esperar intervalo entre 15 y 30 segundos
+        intervalo = random.uniform(15, 30)
+        time.sleep(intervalo)
+
+        # construir mensaje con snapshot de estado
+        with state_lock:
+            temp = shared_state['temperatura']
+            hum = shared_state['humedad']
+            dir_v = shared_state['direccion_viento']
+
+        # Si alguna lectura aún no se ha generado (p. ej. al inicio), la rellenamos o la omitimos
+        if temp is None:
+            temp = generar_temperatura()
+        if hum is None:
+            hum = generar_humedad()
+        if dir_v is None:
+            dir_v = generar_direccion_viento()
+
+        mensaje = {
+            "temperatura": float(round(float(temp), 2)),  # float nativo, 2 decimales
+            "humedad": int(hum),                           # entero nativo
+            "direccion_viento": str(dir_v),                # string nativo
+            "timestamp": int(time.time())
+        }
+
+        contador += 1
+        logger.info(f"[#{contador}] Enviando mensaje combinado: {mensaje}")
+
+        try:
+            future = producer.send(
+                TOPIC_NAME,
+                key=node_key,   # key del nodo/dispositivo
+                value=mensaje
+            )
+            metadata = future.get(timeout=10)
+            logger.info(f"✓ Mensaje enviado a {metadata.topic} partition {metadata.partition}")
+        except KafkaError as e:
+            logger.error(f"✗ Error enviando mensaje combinado: {e}")
+
+
+# ------------------ INICIALIZACIÓN Y MAIN ------------------
+
+def start_sensor_threads():
+    t_temp = threading.Thread(target=sensor_temperatura_worker, daemon=True)
+    t_hum = threading.Thread(target=sensor_humedad_worker, daemon=True)
+    t_viento = threading.Thread(target=sensor_viento_worker, daemon=True)
+
+    t_temp.start()
+    t_hum.start()
+    t_viento.start()
+    logger.info("Hilos de sensores iniciados (temperatura, humedad, viento).")
+
+
 def produce_messages():
     producer = create_producer()
+    start_sensor_threads()
 
-    logger.info(f'Iniciando emisión de datos desde {NUM_SENSORES} sensores...\n')
-
-    sensores = [f"Sensor{i+1}" for i in range(NUM_SENSORES)]
-    logger.info(f"Sensores activos: {sensores}")
-
-    contador = 0
-
+    # Ejecutar el loop del producer en el hilo principal (o en otro hilo si prefieres)
     try:
-        while True:
-            contador += 1
-
-            for sensor in sensores:
-                lectura = generar_lectura_sensores(sensor)
-
-                logger.info(f'[#{contador}] Enviando desde {sensor}: {lectura}')
-
-                try:
-                    future = producer.send(
-                        TOPIC_NAME,
-                        key=sensor,
-                        value=lectura
-                    )
-                    record_metadata = future.get(timeout=10)
-                    logger.info(f'✓ {sensor} → partición {record_metadata.partition}')
-                except KafkaError as e:
-                    logger.error(f'✗ Error enviando desde {sensor}: {e}')
-
-            logger.info('Esperando 15 segundos...\n')
-            time.sleep(15)
-
+        producer_loop(producer, node_key="Nodo1")
     except KeyboardInterrupt:
         logger.info('⚠ Interrupción detectada. Cerrando productor...')
     finally:
@@ -114,14 +186,13 @@ def produce_messages():
 
 def main():
     logger.info('=' * 60)
-    logger.info('[PRODUCER] Iniciando simulación de sensores múltiples')
+    logger.info('[PRODUCER] Iniciando simulación: sensores separados + envío combinado')
     logger.info('=' * 60)
 
     if not wait_for_kafka():
         logger.error('Error: No se pudo conectar a Kafka. Abortando...')
         return
 
-    logger.info('Kafka listo. Iniciando simulación...')
     produce_messages()
 
 
