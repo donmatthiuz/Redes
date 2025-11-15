@@ -1,6 +1,10 @@
 # Iniciar todo
 docker-compose up -d
 
+
+# Entrar a contenedor
+
+
 # Ver logs en tiempo real
 docker-compose logs -f python-app
 

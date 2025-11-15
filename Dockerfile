@@ -18,4 +18,3 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Comando por defecto
-CMD ["python", "app.py"]

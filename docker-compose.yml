@@ -11,6 +11,7 @@ services:
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
+      - ./logs/zookeeper:/var/log/zookeeper
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -29,8 +30,11 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG4J_ROOT_LOGLEVEL: INFO
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
     volumes:
       - kafka-data:/var/lib/kafka/data
+      - ./logs/kafka:/var/log/kafka
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
@@ -38,7 +42,7 @@ services:
       retries: 5
       start_period: 40s
 
-  python-app:
+  producer:
     build: .
     depends_on:
       kafka:
@@ -48,13 +52,33 @@ services:
       - ./:/app
       # Excluir __pycache__ y otros archivos temporales
       - /app/__pycache__
+      # Logs de Python
+      - ./logs/producer:/app/logs
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PYTHONUNBUFFERED: 1
-    command: python app.py
+      LOG_FILE: /app/logs/producer.log
+    command: python producer.py
     restart: on-failure
-    # Descomentar si quieres que se reinicie automáticamente con watchdog
-    # command: watchmedo auto-restart --directory=./ --pattern=*.py --recursive -- python app.py
+
+  consumer:
+    build: .
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      # Volumen para desarrollo - tus cambios se reflejan inmediatamente
+      - ./:/app
+      # Excluir __pycache__ y otros archivos temporales
+      - /app/__pycache__
+      # Logs de Python
+      - ./logs/consumer:/app/logs
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PYTHONUNBUFFERED: 1
+      LOG_FILE: /app/logs/consumer.log
+    command: python consumer.py
+    restart: on-failure
 
 volumes:
   zookeeper-data:
