@@ -80,6 +80,19 @@ services:
     command: python consumer.py
     restart: on-failure
 
+  webapp:
+    build: .
+    depends_on:
+      - consumer
+    volumes:
+      - ./:/app
+      - ./logs:/app/logs
+    ports:
+      - "8501:8501"
+    environment:
+      PYTHONUNBUFFERED: 1
+    command: streamlit run telemetria.py --server.port=8501 --server.address=0.0.0.0
+
 volumes:
   zookeeper-data:
   zookeeper-logs:
