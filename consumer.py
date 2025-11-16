@@ -3,6 +3,7 @@ import json
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from kafka_utils import KAFKA_SERVERS, TOPIC_NAME, wait_for_kafka, setup_logger
+from decoder_encoder import decode  # Importar función de decodificación
 
 logger = setup_logger("consumer")
 
@@ -14,7 +15,6 @@ def ensure_data_dir():
 
 
 def save_payload(payload):
-    """Guardar cada mensaje como una línea JSON"""
     with open(DATA_FILE, "a") as f:
         f.write(json.dumps(payload) + "\n")
 
@@ -45,9 +45,35 @@ def consume_messages():
     try:
         for msg in consumer:
             payload = msg.value
-            logger.info(f"Datos recibidos: {payload}")
-
-            save_payload(payload)
+            
+            # El payload viene como: {"data": "3_bytes_codificados", "timestamp": 123456}
+            try:
+                # Extraer los datos codificados
+                datos_codificados = payload.get("data")
+                timestamp = payload.get("timestamp")
+                
+                if not datos_codificados:
+                    logger.warning("Mensaje sin campo 'data', ignorando...")
+                    continue
+                
+                logger.info(f"Datos codificados recibidos: {repr(datos_codificados)} ({len(datos_codificados)} bytes)")
+                logger.info(f"Hex: {datos_codificados.encode('latin-1').hex()}")
+                
+                # DECODIFICAR los 3 bytes
+                datos_decodificados = decode(datos_codificados)
+                
+                # Agregar el timestamp al mensaje decodificado
+                datos_decodificados["timestamp"] = timestamp
+                
+                logger.info(f"✓ Datos decodificados: {datos_decodificados}")
+                
+                # Guardar el mensaje decodificado
+                save_payload(datos_decodificados)
+                
+            except Exception as e:
+                logger.error(f"✗ Error decodificando mensaje: {e}")
+                logger.error(f"Payload original: {payload}")
+                continue
 
     except KeyboardInterrupt:
         logger.info("Consumidor detenido.")
@@ -56,7 +82,10 @@ def consume_messages():
 
 
 def main():
-    logger.info("Iniciando consumer...")
+    logger.info("=" * 60)
+    logger.info("[CONSUMER] Iniciando: MODO DECODIFICACIÓN")
+    logger.info("=" * 60)
+    
     if not wait_for_kafka():
         logger.error("Error conectando a Kafka.")
         return

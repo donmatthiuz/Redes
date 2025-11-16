@@ -8,6 +8,7 @@ from kafka import KafkaProducer
 from kafka.errors import KafkaError, NoBrokersAvailable
 
 from kafka_utils import KAFKA_SERVERS, TOPIC_NAME, wait_for_kafka, setup_logger
+from decoder_encoder import encode  # Importar función de codificación
 
 # Configurar logger
 logger = setup_logger('producer')
@@ -34,7 +35,6 @@ shared_state = {
 state_lock = threading.Lock()
 
 
-# ------------------ GENERADORES (cada sensor solo su medida) ------------------
 
 def generar_temperatura():
     # Distribución normal centrada en TEMP_MEDIA, recortada al rango
@@ -54,7 +54,6 @@ def generar_direccion_viento():
     return str(np.random.choice(DIRECCIONES_VIENTO))
 
 
-# ------------------ WORKERS DE SENSORES ------------------
 
 def sensor_temperatura_worker():
     while True:
@@ -85,7 +84,6 @@ def sensor_viento_worker():
         time.sleep(5)
 
 
-# ------------------ PRODUCER ------------------
 
 def create_producer():
     max_retries = 5
@@ -93,7 +91,8 @@ def create_producer():
         try:
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_SERVERS,
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                # Serializar como bytes directamente (ya está codificado)
+                value_serializer=lambda v: v.encode('latin-1'),
                 key_serializer=lambda k: str(k).encode("utf-8"),
                 request_timeout_ms=10000,
                 max_block_ms=10000
@@ -111,10 +110,6 @@ def create_producer():
 
 
 def producer_loop(producer, node_key="Nodo1"):
-    """
-    Cada intervalo (aleatorio entre 15 y 30s) toma las lecturas más recientes
-    y envía un único mensaje JSON combinado.
-    """
     contador = 0
     while True:
         # esperar intervalo entre 15 y 30 segundos
@@ -135,29 +130,55 @@ def producer_loop(producer, node_key="Nodo1"):
         if dir_v is None:
             dir_v = generar_direccion_viento()
 
-        mensaje = {
-            "temperatura": float(round(float(temp), 2)),  # float nativo, 2 decimales
-            "humedad": int(hum),                           # entero nativo
-            "direccion_viento": str(dir_v),                # string nativo
+        # Crear el mensaje original (para logging)
+        mensaje_original = {
+            "temperatura": float(round(float(temp), 2)),
+            "humedad": int(hum),
+            "direccion_viento": str(dir_v),
             "timestamp": int(time.time())
         }
 
+        # CODIFICAR el mensaje en 3 bytes
+        try:
+            # Solo codificamos temperatura, humedad y dirección (no el timestamp)
+            datos_a_codificar = {
+                "temperatura": mensaje_original["temperatura"],
+                "humedad": mensaje_original["humedad"],
+                "direccion_viento": mensaje_original["direccion_viento"]
+            }
+            mensaje_codificado = encode(datos_a_codificar)
+            
+            # Crear un mensaje que incluya los 3 bytes codificados + timestamp
+            # El timestamp lo mantenemos sin codificar para facilitar queries
+            mensaje_final = {
+                "data": mensaje_codificado,  # 3 caracteres codificados
+                "timestamp": mensaje_original["timestamp"]
+            }
+            
+            # Convertir a JSON para enviar
+            mensaje_a_enviar = json.dumps(mensaje_final)
+
+        except Exception as e:
+            logger.error(f"✗ Error codificando mensaje: {e}")
+            continue
+
         contador += 1
-        logger.info(f"[#{contador}] Enviando mensaje combinado: {mensaje}")
+        logger.info(f"[#{contador}] Original: {mensaje_original}")
+        logger.info(f"[#{contador}] Codificado: {repr(mensaje_codificado)} ({len(mensaje_codificado)} bytes)")
+        logger.info(f"[#{contador}] Hex: {mensaje_codificado.encode('latin-1').hex()}")
 
         try:
             future = producer.send(
                 TOPIC_NAME,
-                key=node_key,   # key del nodo/dispositivo
-                value=mensaje
+                key=node_key,
+                value=mensaje_a_enviar
             )
             metadata = future.get(timeout=10)
             logger.info(f"✓ Mensaje enviado a {metadata.topic} partition {metadata.partition}")
         except KafkaError as e:
-            logger.error(f"✗ Error enviando mensaje combinado: {e}")
+            logger.error(f"✗ Error enviando mensaje: {e}")
 
 
-# ------------------ INICIALIZACIÓN Y MAIN ------------------
 
 def start_sensor_threads():
     t_temp = threading.Thread(target=sensor_temperatura_worker, daemon=True)
@@ -174,7 +195,7 @@ def produce_messages():
     producer = create_producer()
     start_sensor_threads()
 
-    # Ejecutar el loop del producer en el hilo principal (o en otro hilo si prefieres)
+    # Ejecutar el loop del producer en el hilo principal
     try:
         producer_loop(producer, node_key="Nodo1")
     except KeyboardInterrupt:
@@ -186,7 +207,7 @@ def produce_messages():
 
 def main():
     logger.info('=' * 60)
-    logger.info('[PRODUCER] Iniciando simulación: sensores separados + envío combinado')
+    logger.info('[PRODUCER] Iniciando simulación: MODO CODIFICADO (3 bytes)')
     logger.info('=' * 60)
 
     if not wait_for_kafka():
